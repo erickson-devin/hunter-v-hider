@@ -1,4 +1,5 @@
 using UnityEngine;
+using HunterVsHider.Player;
 
 namespace HunterVsHider.Weapons
 {
@@ -8,6 +9,7 @@ namespace HunterVsHider.Weapons
         [Header("Bullet Settings")]
         public float speed = 20f;
         public float lifetime = 3f;
+        public int damage = 10;
 
         private Rigidbody2D rb;
 
@@ -30,6 +32,12 @@ namespace HunterVsHider.Weapons
 
         private void OnCollisionEnter2D(Collision2D collision)
         {
+            // Apply damage if possible
+            if (collision.gameObject.TryGetComponent(out Health health))
+            {
+                health.TakeDamage(damage);
+            }
+
             // Destroy on collision
             Destroy(gameObject);
         }
