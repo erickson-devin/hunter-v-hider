@@ -33,6 +33,12 @@ namespace HunterVsHider.Weapons
         // CRITICAL FIX: Changed from OnCollisionEnter2D to OnTriggerEnter2D
         private void OnTriggerEnter2D(Collider2D collision)
         {
+            // Prevent the bullet from destroying itself if it touches the Player!
+            if (collision.gameObject.CompareTag("Player"))
+            {
+                return;
+            }
+
             // Apply damage if possible
             if (collision.gameObject.TryGetComponent(out Health health))
             {
