@@ -26,11 +26,12 @@ namespace HunterVsHider.Weapons
 
         private void FixedUpdate()
         {
-            // Move forward
-            rb.linearVelocity = transform.right * speed;
+            // Move forward (using 'up' instead of 'right' for 2D top-down)
+            rb.linearVelocity = transform.up * speed;
         }
 
-        private void OnCollisionEnter2D(Collision2D collision)
+        // CRITICAL FIX: Changed from OnCollisionEnter2D to OnTriggerEnter2D
+        private void OnTriggerEnter2D(Collider2D collision)
         {
             // Apply damage if possible
             if (collision.gameObject.TryGetComponent(out Health health))
