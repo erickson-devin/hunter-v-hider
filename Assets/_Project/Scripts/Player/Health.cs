@@ -25,6 +25,7 @@ namespace HunterVsHider.Player
 
         private void Die()
         {
+            Debug.Log($"{gameObject.name} died.");
             Destroy(gameObject);
         }
     }
