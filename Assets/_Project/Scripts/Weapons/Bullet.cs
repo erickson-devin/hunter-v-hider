@@ -46,7 +46,7 @@ namespace HunterVsHider.Weapons
             }
 
             // Destroy on collision
-            Destroy(gameObject);
+            Destroy(gameObject); 
         }
     }
 }
