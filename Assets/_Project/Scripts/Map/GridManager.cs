@@ -6,7 +6,7 @@ namespace HunterVsHider.Map
     public class GridManager : MonoBehaviour
     {
         [Tooltip("The parent object for all walls. MUST have a CompositeCollider2D and a Static Rigidbody2D.")]
-        [SerializeField] private Transform _gridContainer;
+        public Transform mapParent;
         [SerializeField] private float _cellSize = 1f;
         
         // The source of truth for our grid
@@ -51,8 +51,17 @@ namespace HunterVsHider.Map
 
             Vector3 spawnPos = GridToWorldPosition(gridPosition);
             
-            // Instantiate as a child of the GridContainer to utilize CompositeCollider2D
-            GameObject newWall = Instantiate(wallPrefab, spawnPos, Quaternion.identity, _gridContainer);
+            GameObject newWall;
+            if (mapParent != null)
+            {
+                // Instantiate as a child of the mapParent to utilize CompositeCollider2D
+                newWall = Instantiate(wallPrefab, spawnPos, Quaternion.identity, mapParent);
+            }
+            else
+            {
+                Debug.LogWarning("GridManager.mapParent is null! Spawning wall at the root hierarchy to prevent crash. CompositeCollider2D merging will fail.");
+                newWall = Instantiate(wallPrefab, spawnPos, Quaternion.identity);
+            }
             
             // Update grid data
             _grid[gridPosition] = new GridCellData(CellOccupant.Wall, newWall);
