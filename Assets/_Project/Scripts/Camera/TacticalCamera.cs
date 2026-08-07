@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace HunterVsHider.Camera
+namespace HunterVsHider.Cameras
 {
     public class TacticalCamera : MonoBehaviour
     {
