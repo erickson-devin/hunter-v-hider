@@ -56,11 +56,20 @@ namespace HunterVsHider.Weapons
 
             if (Physics.Raycast(ray, out RaycastHit hit, range, layerMask))
             {
-                // Optional hit logic here
-            }
+                IDamageable damageable = hit.collider.GetComponent<IDamageable>();
+                if (damageable != null)
+                {
+                    damageable.TakeDamage(25f);
+                }
 
-            // Visualize the ray
-            Debug.DrawRay(muzzlePoint.position, muzzlePoint.forward * range, Color.red, 2.0f);
+                // Visualize the ray (hit)
+                Debug.DrawRay(muzzlePoint.position, hit.point - muzzlePoint.position, Color.red, 2.0f);
+            }
+            else
+            {
+                // Visualize the ray (miss)
+                Debug.DrawRay(muzzlePoint.position, muzzlePoint.forward * range, Color.red, 2.0f);
+            }
             
             // Console output
             Debug.Log($"[{gameObject.name}] Fired | Ammo: {currentAmmo}/{maxAmmo}");
