@@ -127,7 +127,11 @@ public class SetupTask13b
         if (changed)
         {
             EditorUtility.SetDirty(playerGo);
+            if (!UnityEngine.Application.isPlaying)
+            {
+                
             EditorSceneManager.MarkSceneDirty(activeScene);
+            }
             Debug.Log("Card 1.3b: Successfully re-parented and aligned the Weapon Hierarchy in Tactical_Main!");
         }
 
@@ -135,3 +139,4 @@ public class SetupTask13b
         EditorApplication.delayCall -= ExecuteSetup;
     }
 }
+

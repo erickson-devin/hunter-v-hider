@@ -12,19 +12,66 @@ namespace HunterVsHider.Weapons
         [SerializeField] private int maxAmmo = 30;
         [SerializeField] private float fireRate = 0.15f;
         [SerializeField] private float reloadTime = 2.0f;
+        [SerializeField] private float maxRange = 50f;
+        [SerializeField] private float damage = 25f;
 
+        [Header("Audio Settings")]
+        [SerializeField] private AudioClip fireSFX;
+        [SerializeField] private AudioClip reloadSFX;
+        [SerializeField] private AudioClip dryFireSFX;
+        [SerializeField] private AudioClip impactSFX;
+
+        private AudioSource audioSource;
         private int currentAmmo;
-        private float nextFireTime = 0f;
+        private float nextTimeToFire = 0f;
         private bool isReloading = false;
+
+        private void Awake()
+        {
+            currentAmmo = maxAmmo;
+            isReloading = false;
+            audioSource = GetComponent<AudioSource>();
+            if (audioSource == null)
+            {
+                audioSource = gameObject.AddComponent<AudioSource>();
+                audioSource.playOnAwake = false;
+                audioSource.spatialBlend = 0.2f; // 2D/3D hybrid to prevent camera distance attenuation
+            }
+
+            if (fireSFX == null) fireSFX = CreateSynthClip("Fire", 440f, 0.1f);
+            if (reloadSFX == null) reloadSFX = CreateSynthClip("Reload", 220f, 0.5f);
+            if (dryFireSFX == null) dryFireSFX = CreateSynthClip("DryFire", 880f, 0.05f);
+            if (impactSFX == null) impactSFX = CreateSynthClip("Impact", 100f, 0.15f);
+        }
 
         private void Start()
         {
-            currentAmmo = maxAmmo;
-            
             if (muzzlePoint == null)
             {
                 muzzlePoint = transform.Find("MuzzlePoint");
             }
+        }
+
+        private AudioClip CreateSynthClip(string name, float frequency, float duration)
+        {
+            int sampleRate = 44100;
+            int samples = (int)(sampleRate * duration);
+            AudioClip clip = AudioClip.Create(name, samples, 1, sampleRate, false);
+            float[] data = new float[samples];
+            for (int i = 0; i < samples; i++)
+            {
+                data[i] = Mathf.Sin(2 * Mathf.PI * frequency * i / sampleRate);
+                float envelope = 1f - ((float)i / samples);
+                data[i] *= envelope * 0.5f;
+            }
+            clip.SetData(data, 0);
+            return clip;
+        }
+
+        private void OnDisable()
+        {
+            StopAllCoroutines();
+            isReloading = false;
         }
 
         public void TryFire()
@@ -34,45 +81,51 @@ namespace HunterVsHider.Weapons
 
         public void Shoot()
         {
-            if (isReloading || currentAmmo <= 0 || Time.time < nextFireTime)
+            if (isReloading) return;
+
+            // Dry Fire Audio Feedback
+            if (currentAmmo <= 0)
             {
+                if (dryFireSFX != null && audioSource != null)
+                {
+                    audioSource.PlayOneShot(dryFireSFX, 0.5f);
+                }
                 return;
             }
 
-            if (muzzlePoint == null)
-            {
-                Debug.LogWarning("MuzzlePoint is missing on Gun!");
-                return;
-            }
+            if (Time.time < nextTimeToFire) return;
 
-            // Update state
-            nextFireTime = Time.time + fireRate;
+            nextTimeToFire = Time.time + fireRate;
             currentAmmo--;
 
-            // Perform 3D Raycast
-            Ray ray = new Ray(muzzlePoint.position, muzzlePoint.forward);
-            int layerMask = ~(1 << 6); // Ignore Player layer
-            float range = 50f;
-
-            if (Physics.Raycast(ray, out RaycastHit hit, range, layerMask))
+            // Gunshot Audio
+            if (fireSFX != null && audioSource != null)
             {
+                audioSource.PlayOneShot(fireSFX, 0.8f);
+            }
+
+            int layerMask = ~LayerMask.GetMask("Ignore Raycast", "UI");
+
+            if (Physics.Raycast(muzzlePoint.position, muzzlePoint.forward, out RaycastHit hit, maxRange, layerMask, QueryTriggerInteraction.Ignore))
+            {
+                // Impact SFX at hit location
+                if (impactSFX != null)
+                {
+                    AudioSource.PlayClipAtPoint(impactSFX, hit.point, 0.6f);
+                }
+
                 IDamageable damageable = hit.collider.GetComponent<IDamageable>();
                 if (damageable != null)
                 {
-                    damageable.TakeDamage(25f);
+                    damageable.TakeDamage(damage);
                 }
 
-                // Visualize the ray (hit)
                 Debug.DrawRay(muzzlePoint.position, hit.point - muzzlePoint.position, Color.red, 2.0f);
             }
             else
             {
-                // Visualize the ray (miss)
-                Debug.DrawRay(muzzlePoint.position, muzzlePoint.forward * range, Color.red, 2.0f);
+                Debug.DrawRay(muzzlePoint.position, muzzlePoint.forward * maxRange, Color.red, 2.0f);
             }
-            
-            // Console output
-            Debug.Log($"[{gameObject.name}] Fired | Ammo: {currentAmmo}/{maxAmmo}");
         }
 
         public void Reload()
@@ -88,13 +141,16 @@ namespace HunterVsHider.Weapons
         private IEnumerator ReloadCoroutine()
         {
             isReloading = true;
-            Debug.Log("Reloading...");
+            
+            // Reload Audio
+            if (reloadSFX != null && audioSource != null)
+            {
+                audioSource.PlayOneShot(reloadSFX, 0.7f);
+            }
 
             yield return new WaitForSeconds(reloadTime);
-
             currentAmmo = maxAmmo;
             isReloading = false;
-            Debug.Log($"Reload Complete! Ammo: {currentAmmo}/{maxAmmo}");
         }
     }
 }

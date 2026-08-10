@@ -55,7 +55,11 @@ public class SetupTask15
 
         if (changed)
         {
+            if (!UnityEngine.Application.isPlaying)
+            {
+                
             EditorSceneManager.MarkSceneDirty(activeScene);
+            }
             EditorSceneManager.SaveScene(activeScene);
             Debug.Log("Saved Tactical_Main scene with target dummies.");
         }
@@ -63,3 +67,4 @@ public class SetupTask15
         EditorApplication.delayCall -= ExecuteSetup;
     }
 }
+

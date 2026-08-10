@@ -58,7 +58,11 @@ public class SetupTask13c
             if (sceneChanged)
             {
                 EditorUtility.SetDirty(playerGo);
+                if (!UnityEngine.Application.isPlaying)
+                {
+                    
                 EditorSceneManager.MarkSceneDirty(activeScene);
+                }
             }
         }
 
@@ -106,3 +110,4 @@ public class SetupTask13c
         EditorApplication.delayCall -= ExecuteCleanup;
     }
 }
+

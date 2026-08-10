@@ -53,7 +53,11 @@ public class SetupTask11b
 
         if (changed)
         {
+            if (!UnityEngine.Application.isPlaying)
+            {
+                
             EditorSceneManager.MarkSceneDirty(activeScene);
+            }
             // Optionally save the scene
             // EditorSceneManager.SaveScene(activeScene);
         }
@@ -65,3 +69,4 @@ public class SetupTask11b
         }
     }
 }
+
