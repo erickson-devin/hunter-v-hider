@@ -18,45 +18,7 @@ namespace HunterVsHider.Player
         {
             rb = GetComponent<Rigidbody>();
             targetRotation = transform.rotation;
-            SetupWeaponHolder();
-            SetupVisualIndicator();
-        }
-
-        private void SetupVisualIndicator()
-        {
-            Transform existingIndicator = transform.Find("VisualIndicator_Forward");
-            if (existingIndicator == null)
-            {
-                GameObject indicatorGo = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                indicatorGo.name = "VisualIndicator_Forward";
-                indicatorGo.transform.SetParent(transform);
-                indicatorGo.transform.localPosition = new Vector3(0f, 0f, 0.5f);
-                indicatorGo.transform.localScale = new Vector3(0.2f, 0.2f, 0.5f);
-                indicatorGo.transform.localRotation = Quaternion.identity;
-                
-                Collider col = indicatorGo.GetComponent<Collider>();
-                if (col != null)
-                {
-                    Destroy(col); // Remove BoxCollider to prevent physics interference
-                }
-            }
-        }
-
-        private void SetupWeaponHolder()
-        {
-            Transform existingHolder = transform.Find("WeaponHolder");
-            if (existingHolder != null)
-            {
-                WeaponHolder = existingHolder;
-            }
-            else
-            {
-                GameObject holderGo = new GameObject("WeaponHolder");
-                holderGo.transform.SetParent(transform);
-                holderGo.transform.localPosition = Vector3.zero;
-                holderGo.transform.localRotation = Quaternion.identity;
-                WeaponHolder = holderGo.transform;
-            }
+            WeaponHolder = transform.Find("WeaponHolder");
         }
 
         private void Update()

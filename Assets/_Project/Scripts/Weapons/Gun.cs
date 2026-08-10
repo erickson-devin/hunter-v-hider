@@ -6,7 +6,8 @@ namespace HunterVsHider.Weapons
     {
         [Header("Configuration")]
         public WeaponDataSO weaponData;
-        public Transform firePoint;
+        
+        [SerializeField] private Transform muzzlePoint;
 
         private float nextFireTime = 0f;
         private int currentAmmo;
@@ -17,6 +18,26 @@ namespace HunterVsHider.Weapons
             if (weaponData != null)
             {
                 currentAmmo = weaponData.maxAmmo;
+            }
+
+            if (muzzlePoint == null)
+            {
+                muzzlePoint = transform.Find("MuzzlePoint");
+            }
+        }
+
+        private void Update()
+        {
+            if (Input.GetButtonDown("Fire1"))
+            {
+                if (weaponData != null)
+                {
+                    TryFire();
+                }
+                else
+                {
+                    Shoot();
+                }
             }
         }
 
@@ -33,32 +54,33 @@ namespace HunterVsHider.Weapons
             if (Time.time >= nextFireTime)
             {
                 nextFireTime = Time.time + weaponData.fireRate;
-                Fire();
+                currentAmmo--;
+                Shoot();
             }
         }
 
-        private void Fire()
+        public void Shoot()
         {
-            currentAmmo--;
-            
-            // Perform 3D Raycast
-            Ray ray = new Ray(firePoint.position, firePoint.forward);
-            
-            // We want to hit everything EXCEPT the Player. 
-            // Player is layer 6. So we can use a LayerMask that ignores layer 6.
-            int layerMask = ~(1 << 6);
+            if (muzzlePoint == null)
+            {
+                Debug.LogWarning("MuzzlePoint is missing on Gun!");
+                return;
+            }
 
-            if (Physics.Raycast(ray, out RaycastHit hit, weaponData.range, layerMask))
+            // Perform 3D Raycast
+            Ray ray = new Ray(muzzlePoint.position, muzzlePoint.forward);
+            int layerMask = ~(1 << 6); // Ignore Player layer
+
+            float range = weaponData != null ? weaponData.range : 50f;
+
+            if (Physics.Raycast(ray, out RaycastHit hit, range, layerMask))
             {
-                Debug.Log($"[Gun] Hit {hit.collider.name} on layer {LayerMask.LayerToName(hit.collider.gameObject.layer)}!");
-                
-                // TODO: Apply damage if the target has health
-                // if (hit.collider.TryGetComponent(out Health targetHealth)) { targetHealth.TakeDamage(weaponData.damage); }
+                Debug.Log($"[Gun] Hit {hit.collider.name}");
             }
-            else
-            {
-                Debug.Log("[Gun] Fired, but hit nothing.");
-            }
+
+            // Visualize the ray
+            Debug.DrawRay(muzzlePoint.position, muzzlePoint.forward * range, Color.red, 2.0f);
+            Debug.Log("Pistol Fired from: " + muzzlePoint.position);
         }
 
         private System.Collections.IEnumerator ReloadRoutine()
@@ -66,9 +88,10 @@ namespace HunterVsHider.Weapons
             isReloading = true;
             Debug.Log("[Gun] Reloading...");
             
-            yield return new WaitForSeconds(weaponData.reloadTime);
+            float reloadTime = weaponData != null ? weaponData.reloadTime : 2f;
+            yield return new WaitForSeconds(reloadTime);
             
-            currentAmmo = weaponData.maxAmmo;
+            if (weaponData != null) currentAmmo = weaponData.maxAmmo;
             isReloading = false;
             Debug.Log("[Gun] Reload complete.");
         }
