@@ -1,99 +1,91 @@
 using UnityEngine;
+using System.Collections;
 
 namespace HunterVsHider.Weapons
 {
     public class Gun : MonoBehaviour
     {
-        [Header("Configuration")]
-        public WeaponDataSO weaponData;
-        
+        [Header("References")]
         [SerializeField] private Transform muzzlePoint;
 
-        private float nextFireTime = 0f;
+        [Header("Gun Stats")]
+        [SerializeField] private int maxAmmo = 30;
+        [SerializeField] private float fireRate = 0.15f;
+        [SerializeField] private float reloadTime = 2.0f;
+
         private int currentAmmo;
+        private float nextFireTime = 0f;
         private bool isReloading = false;
 
         private void Start()
         {
-            if (weaponData != null)
-            {
-                currentAmmo = weaponData.maxAmmo;
-            }
-
+            currentAmmo = maxAmmo;
+            
             if (muzzlePoint == null)
             {
                 muzzlePoint = transform.Find("MuzzlePoint");
             }
         }
 
-        private void Update()
-        {
-            if (Input.GetButtonDown("Fire1"))
-            {
-                if (weaponData != null)
-                {
-                    TryFire();
-                }
-                else
-                {
-                    Shoot();
-                }
-            }
-        }
-
         public void TryFire()
         {
-            if (isReloading || weaponData == null) return;
-
-            if (currentAmmo <= 0)
-            {
-                StartCoroutine(ReloadRoutine());
-                return;
-            }
-
-            if (Time.time >= nextFireTime)
-            {
-                nextFireTime = Time.time + weaponData.fireRate;
-                currentAmmo--;
-                Shoot();
-            }
+            Shoot();
         }
 
         public void Shoot()
         {
+            if (isReloading || currentAmmo <= 0 || Time.time < nextFireTime)
+            {
+                return;
+            }
+
             if (muzzlePoint == null)
             {
                 Debug.LogWarning("MuzzlePoint is missing on Gun!");
                 return;
             }
 
+            // Update state
+            nextFireTime = Time.time + fireRate;
+            currentAmmo--;
+
             // Perform 3D Raycast
             Ray ray = new Ray(muzzlePoint.position, muzzlePoint.forward);
             int layerMask = ~(1 << 6); // Ignore Player layer
-
-            float range = weaponData != null ? weaponData.range : 50f;
+            float range = 50f;
 
             if (Physics.Raycast(ray, out RaycastHit hit, range, layerMask))
             {
-                Debug.Log($"[Gun] Hit {hit.collider.name}");
+                // Optional hit logic here
             }
 
             // Visualize the ray
             Debug.DrawRay(muzzlePoint.position, muzzlePoint.forward * range, Color.red, 2.0f);
-            Debug.Log("Pistol Fired from: " + muzzlePoint.position);
+            
+            // Console output
+            Debug.Log($"[{gameObject.name}] Fired | Ammo: {currentAmmo}/{maxAmmo}");
         }
 
-        private System.Collections.IEnumerator ReloadRoutine()
+        public void Reload()
+        {
+            if (isReloading || currentAmmo >= maxAmmo)
+            {
+                return;
+            }
+
+            StartCoroutine(ReloadCoroutine());
+        }
+
+        private IEnumerator ReloadCoroutine()
         {
             isReloading = true;
-            Debug.Log("[Gun] Reloading...");
-            
-            float reloadTime = weaponData != null ? weaponData.reloadTime : 2f;
+            Debug.Log("Reloading...");
+
             yield return new WaitForSeconds(reloadTime);
-            
-            if (weaponData != null) currentAmmo = weaponData.maxAmmo;
+
+            currentAmmo = maxAmmo;
             isReloading = false;
-            Debug.Log("[Gun] Reload complete.");
+            Debug.Log($"Reload Complete! Ammo: {currentAmmo}/{maxAmmo}");
         }
     }
 }
