@@ -5,18 +5,23 @@ namespace HunterVsHider.Player
 {
     public class PlayerWeaponManager : MonoBehaviour
     {
-        [SerializeField] private Gun activeGun;
+        [SerializeField] private Gun pistol;
+        [SerializeField] private Gun rifle;
 
-        private void Awake()
+        private Gun activeGun;
+
+        private void Start()
         {
-            if (activeGun == null)
-            {
-                activeGun = GetComponentInChildren<Gun>();
-            }
+            activeGun = pistol;
+            if (pistol != null) pistol.gameObject.SetActive(true);
+            if (rifle != null) rifle.gameObject.SetActive(false);
+            Debug.Log("Equipped Pistol");
         }
 
         private void Update()
         {
+            HandleWeaponSwapping();
+
             if (activeGun == null) return;
 
             // Handle Firing (Holding down button for automatic fire)
@@ -29,6 +34,24 @@ namespace HunterVsHider.Player
             if (Input.GetKeyDown(KeyCode.R))
             {
                 activeGun.Reload();
+            }
+        }
+
+        private void HandleWeaponSwapping()
+        {
+            if (Input.GetKeyDown(KeyCode.Alpha1) && activeGun != pistol)
+            {
+                if (pistol != null) pistol.gameObject.SetActive(true);
+                if (rifle != null) rifle.gameObject.SetActive(false);
+                activeGun = pistol;
+                Debug.Log("Equipped Pistol");
+            }
+            else if (Input.GetKeyDown(KeyCode.Alpha2) && activeGun != rifle)
+            {
+                if (pistol != null) pistol.gameObject.SetActive(false);
+                if (rifle != null) rifle.gameObject.SetActive(true);
+                activeGun = rifle;
+                Debug.Log("Equipped Rifle");
             }
         }
     }
