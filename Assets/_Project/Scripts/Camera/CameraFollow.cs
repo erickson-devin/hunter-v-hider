@@ -8,20 +8,17 @@ namespace HunterVsHider.Cameras
         public Transform target;
         
         [Header("Camera Offsets")]
-        public float height = 18f;
+        public Vector3 offset = new Vector3(0f, 18f, -10.4f);
         public float pitch = 60f;
 
         private void LateUpdate()
         {
             if (target == null) return;
 
-            // Strict follow without smoothing ensures 100% jitter-free tracking with Interpolated Rigidbody
-            Vector3 targetPosition = target.position;
-            targetPosition.y += height;
-
-            transform.position = targetPosition;
+            // Follow target with the new offset
+            transform.position = target.position + offset;
             
-            // Maintain the 60 degree pitch
+            // Maintain the 60 degree pitch strictly
             transform.rotation = Quaternion.Euler(pitch, 0f, 0f);
         }
     }
