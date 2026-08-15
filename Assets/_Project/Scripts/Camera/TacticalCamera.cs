@@ -7,33 +7,73 @@ namespace HunterVsHider.Cameras
         [Header("Target Tracking")]
         public Transform target;
         public float smoothSpeed = 10f;
+        public bool useSmooth = true;
 
         [Header("Camera Offsets")]
-        public float height = 18f;
+        public Vector3 offset = new Vector3(0f, 18f, -10.4f);
         public float pitch = 60f;
 
-        private UnityEngine.Camera cam;
+        public float height
+        {
+            get => offset.y;
+            set => offset.y = value;
+        }
 
         private void Awake()
         {
-            cam = GetComponent<UnityEngine.Camera>();
+            EnsureCameraSettings();
+            FindTargetIfNull();
+        }
+
+        private void Start()
+        {
+            FindTargetIfNull();
+        }
+
+        public void EnsureCameraSettings()
+        {
+            Camera cam = GetComponent<Camera>();
             if (cam != null)
             {
-                cam.orthographic = false; // Ensure Perspective Mode
+                cam.orthographic = false;
+                cam.fieldOfView = 60f;
+                cam.nearClipPlane = 0.3f;
+                cam.farClipPlane = 100f;
+                cam.depthTextureMode |= DepthTextureMode.Depth;
+            }
+        }
+
+        public void FindTargetIfNull()
+        {
+            if (target == null)
+            {
+                GameObject player = GameObject.FindWithTag("Player") ?? GameObject.Find("Player");
+                if (player != null)
+                {
+                    target = player.transform;
+                }
             }
         }
 
         private void LateUpdate()
         {
-            if (target == null) return;
+            if (target == null)
+            {
+                FindTargetIfNull();
+                if (target == null) return;
+            }
 
-            // Calculate target position with fixed Y offset
-            Vector3 targetPosition = target.position + Vector3.up * height;
+            Vector3 targetPosition = target.position + offset;
 
-            // Smooth follow
-            transform.position = Vector3.Lerp(transform.position, targetPosition, smoothSpeed * Time.deltaTime);
+            if (useSmooth && Application.isPlaying)
+            {
+                transform.position = Vector3.Lerp(transform.position, targetPosition, smoothSpeed * Time.deltaTime);
+            }
+            else
+            {
+                transform.position = targetPosition;
+            }
 
-            // Set fixed rotation (pitch on X axis)
             transform.rotation = Quaternion.Euler(pitch, 0f, 0f);
         }
     }

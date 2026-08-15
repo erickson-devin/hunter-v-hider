@@ -14,7 +14,7 @@ namespace HunterVsHider.Vision
             {
                 if (_instance == null)
                 {
-                    _instance = Object.FindFirstObjectByType<FogOfWarManager>();
+                    _instance = Object.FindAnyObjectByType<FogOfWarManager>();
                     if (_instance == null && Application.isPlaying)
                     {
                         GameObject go = new GameObject("_FogOfWarManager");

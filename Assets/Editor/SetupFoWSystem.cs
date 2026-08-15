@@ -141,12 +141,12 @@ namespace HunterVsHider.EditorScripts
                     EditorUtility.SetDirty(cam);
                 }
 
-                TacticalCamera tacCam = mainCamObj.GetComponent<TacticalCamera>();
-                if (tacCam == null)
+                CameraFollow camFollow = mainCamObj.GetComponent<CameraFollow>();
+                if (camFollow == null)
                 {
-                    tacCam = mainCamObj.AddComponent<TacticalCamera>();
-                    tacCam.height = 18f;
-                    tacCam.pitch = 60f;
+                    camFollow = mainCamObj.AddComponent<CameraFollow>();
+                    camFollow.offset = new Vector3(0f, 18f, -10.4f);
+                    camFollow.pitch = 60f;
                     sceneModified = true;
                 }
 
@@ -187,6 +187,13 @@ namespace HunterVsHider.EditorScripts
             {
                 if (mainCamObj != null)
                 {
+                    CameraFollow camFollow = mainCamObj.GetComponent<CameraFollow>();
+                    if (camFollow != null && camFollow.target == null)
+                    {
+                        camFollow.target = player.transform;
+                        EditorUtility.SetDirty(camFollow);
+                        sceneModified = true;
+                    }
                     TacticalCamera tacCam = mainCamObj.GetComponent<TacticalCamera>();
                     if (tacCam != null && tacCam.target == null)
                     {

@@ -6,6 +6,7 @@ using UnityEngine.SceneManagement;
 using HunterVsHider.Vision;
 using HunterVsHider.Player;
 using HunterVsHider.Gameplay;
+using HunterVsHider.Cameras;
 
 namespace HunterVsHider.EditorScripts
 {
@@ -46,13 +47,11 @@ namespace HunterVsHider.EditorScripts
             float d1_far = 4.0f;
             float slope_far = (eyeY - obsHeight) / d1_far; // 0.8 / 4 = 0.2
             float shadowDelta_far = (obsHeight - groundY) / slope_far; // 1.0 / 0.2 = 5.0m
-            float shadowEnd_far = d1_far + shadowDelta_far; // 9.0m
 
             // Scenario B: Player distance d1 = 1m from 1m box (player walked closer)
             float d1_close = 1.0f;
             float slope_close = (eyeY - obsHeight) / d1_close; // 0.8 / 1 = 0.8
             float shadowDelta_close = (obsHeight - groundY) / slope_close; // 1.0 / 0.8 = 1.25m
-            float shadowEnd_close = d1_close + shadowDelta_close; // 2.25m
 
             if (Mathf.Approximately(shadowDelta_far, 5.0f) && Mathf.Approximately(shadowDelta_close, 1.25f) && shadowDelta_close < shadowDelta_far)
             {
@@ -65,7 +64,7 @@ namespace HunterVsHider.EditorScripts
                 failed++;
             }
 
-            // Test 3: Scene Objects & Components in Tactical_Main
+            // Test 3: Scene Objects in Tactical_Main
             string scenePath = "Assets/_Project/Scenes/Tactical_Main.unity";
             Scene currentScene = EditorSceneManager.GetActiveScene();
             if (currentScene.path != scenePath)
@@ -86,48 +85,67 @@ namespace HunterVsHider.EditorScripts
                 failed++;
             }
 
-            GameObject playerObj = GameObject.Find("Player") ?? GameObject.FindGameObjectWithTag("Player");
+            // Test 4: Camera & Tracking
+            GameObject mainCamObj = GameObject.FindGameObjectWithTag("MainCamera") ?? GameObject.Find("Main Camera");
+            Camera cam = mainCamObj != null ? mainCamObj.GetComponent<Camera>() : null;
+            AudioListener al = mainCamObj != null ? mainCamObj.GetComponent<AudioListener>() : null;
+            CameraFollow follow = mainCamObj != null ? mainCamObj.GetComponent<CameraFollow>() : null;
+            TacticalCamera tacCam = mainCamObj != null ? mainCamObj.GetComponent<TacticalCamera>() : null;
+
+            if (cam != null && al != null && (follow != null || tacCam != null) && !cam.orthographic && Mathf.Approximately(cam.fieldOfView, 60f))
+            {
+                Vector3 camOffset = follow != null ? follow.offset : tacCam.offset;
+                float camPitch = follow != null ? follow.pitch : tacCam.pitch;
+                Debug.Log($"[PASS] Test 4: Main Camera properly configured (Tag: {mainCamObj.tag}, FOV: {cam.fieldOfView}, Near: {cam.nearClipPlane}, Far: {cam.farClipPlane}, Offset: {camOffset}, Pitch: {camPitch}°).");
+                passed++;
+            }
+            else
+            {
+                Debug.LogError($"[FAIL] Test 4: Main Camera configuration incomplete! Cam: {cam != null}, AudioListener: {al != null}, Follow: {follow != null || tacCam != null}");
+                failed++;
+            }
+
+            // Test 5: Player Setup
+            GameObject playerObj = GameObject.FindGameObjectWithTag("Player") ?? GameObject.Find("Player");
             VisionController vc = playerObj != null ? playerObj.GetComponent<VisionController>() : null;
             FieldOfView fov = playerObj != null ? playerObj.GetComponentInChildren<FieldOfView>() : null;
 
-            if (vc != null && fov != null)
+            if (playerObj != null && vc != null && fov != null)
             {
-                Debug.Log($"[PASS] Test 3b: Police Player configured with VisionController (Eye: {vc.EyeOffset}, FOV: {vc.ViewAngle} deg, Dist: {vc.ViewDistance}m) and FieldOfView dynamic mesh generator.");
+                Debug.Log($"[PASS] Test 5: Player prefab instantiated at {playerObj.transform.position} with VisionController (Eye: {vc.EyeOffset}, FOV: {vc.ViewAngle}°) and FieldOfView.");
                 passed++;
             }
             else
             {
-                Debug.LogError($"[FAIL] Test 3b: Player missing VisionController ({vc != null}) or FieldOfView ({fov != null})!");
+                Debug.LogError($"[FAIL] Test 5: Player missing or incomplete! PlayerObj: {playerObj != null}, VC: {vc != null}, FOV: {fov != null}");
                 failed++;
             }
 
-            // Test 4: Dynamic Entity Visibility (TargetVisibility on Assassins)
-            TargetVisibility[] targets = Object.FindObjectsByType<TargetVisibility>(FindObjectsSortMode.None);
-            if (targets.Length >= 2)
-            {
-                Debug.Log($"[PASS] Test 4: Found {targets.Length} dynamic targets with TargetVisibility attached (including TargetDummies and Assassin dummy).");
-                passed++;
-            }
-            else
-            {
-                Debug.LogError($"[FAIL] Test 4: Found {targets.Length} targets with TargetVisibility (expected >= 2)!");
-                failed++;
-            }
-
-            // Test 5: Camera Depth & Screen Darkness Overlay
-            GameObject mainCamObj = GameObject.FindGameObjectWithTag("MainCamera") ?? GameObject.Find("Main Camera");
-            Camera cam = mainCamObj != null ? mainCamObj.GetComponent<Camera>() : null;
+            // Test 6: FoW_ScreenDarkness Quad & Material
             Transform screenDarkness = mainCamObj != null ? mainCamObj.transform.Find("FoW_ScreenDarkness") : null;
             MeshRenderer screenMr = screenDarkness != null ? screenDarkness.GetComponent<MeshRenderer>() : null;
 
-            if (cam != null && screenMr != null && screenMr.sharedMaterial != null && screenMr.sharedMaterial.shader.name == "Custom/FogOfWarBlit")
+            if (screenDarkness != null && screenMr != null && screenMr.sharedMaterial != null && screenMr.sharedMaterial.shader.name == "Custom/FogOfWarBlit")
             {
-                Debug.Log("[PASS] Test 5: Main Camera configured with DepthTextureMode and FoW_ScreenDarkness quad using Custom/FogOfWarBlit shader.");
+                Debug.Log("[PASS] Test 6: FoW_ScreenDarkness attached to Main Camera with Custom/FogOfWarBlit material.");
                 passed++;
             }
             else
             {
-                Debug.LogError($"[FAIL] Test 5: Camera / FoW_ScreenDarkness invalid! Cam: {cam != null}, ScreenMR: {screenMr != null}, Shader: {(screenMr != null && screenMr.sharedMaterial != null ? screenMr.sharedMaterial.shader.name : "none")}");
+                Debug.LogError($"[FAIL] Test 6: FoW_ScreenDarkness invalid! Trans: {screenDarkness != null}, MR: {screenMr != null}");
+                failed++;
+            }
+
+            // Test 7: Dynamic Target Visibility
+            TargetVisibility[] targets = Object.FindObjectsByType<TargetVisibility>(FindObjectsInactive.Exclude);
+            if (targets.Length >= 3)
+            {
+                Debug.Log($"[PASS] Test 7: Found {targets.Length} dynamic entities configured with TargetVisibility (TargetDummy_01, TargetDummy_02, Assassin_Dummy).");
+                passed++;
+            }
+            else
+            {
+                Debug.LogError($"[FAIL] Test 7: Found {targets.Length} targets with TargetVisibility (expected >= 3)!");
                 failed++;
             }
 
