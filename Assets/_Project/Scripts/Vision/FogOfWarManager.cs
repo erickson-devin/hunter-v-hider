@@ -26,6 +26,9 @@ namespace HunterVsHider.Vision
             private set => _instance = value;
         }
 
+        [Header("Target References")]
+        [SerializeField] private Transform playerTransform;
+
         [Header("Arena Bounds Settings (50m x 50m)")]
         [SerializeField] private Vector2 arenaMin = new Vector2(-25f, -25f);
         [SerializeField] private Vector2 arenaMax = new Vector2(25f, 25f);
@@ -33,7 +36,8 @@ namespace HunterVsHider.Vision
         [Header("Texture Settings")]
         [SerializeField] private int textureResolution = 1024;
 
-        [Header("Shader References")]
+        [Header("Materials & Shaders")]
+        [SerializeField] private Material fowBlitMaterial;
         [SerializeField] private Shader stampShader;
         [SerializeField] private Shader accumulateShader;
 
@@ -48,6 +52,7 @@ namespace HunterVsHider.Vision
         private CommandBuffer renderCmdBuffer;
 
         public RenderTexture CombinedFoWTexture => combinedFoWRT;
+        public RenderTexture ActiveVisionTexture => activeVisionRT;
         public Vector2 ArenaMin => arenaMin;
         public Vector2 ArenaMax => arenaMax;
         public Vector2 ArenaSize => arenaMax - arenaMin;
@@ -56,13 +61,29 @@ namespace HunterVsHider.Vision
         {
             if (_instance != null && _instance != this)
             {
-                Destroy(gameObject);
+                SafeDestroy(gameObject);
                 return;
             }
             _instance = this;
 
+            FindPlayerIfNull();
             InitializeResources();
             EnsureCameraSetup();
+        }
+
+        private void Start()
+        {
+            FindPlayerIfNull();
+            EnsureCameraSetup();
+        }
+
+        private void FindPlayerIfNull()
+        {
+            if (playerTransform == null)
+            {
+                GameObject player = GameObject.FindWithTag("Player") ?? GameObject.Find("Player");
+                if (player != null) playerTransform = player.transform;
+            }
         }
 
         private void OnDestroy()
@@ -75,7 +96,7 @@ namespace HunterVsHider.Vision
             ReleaseResources();
         }
 
-        private void EnsureCameraSetup()
+        public void EnsureCameraSetup()
         {
             Camera mainCam = Camera.main;
             if (mainCam == null)
@@ -88,7 +109,7 @@ namespace HunterVsHider.Vision
             {
                 mainCam.depthTextureMode |= DepthTextureMode.Depth;
 
-                // Ensure screen-space darkness overlay quad exists
+                // Ensure screen-space darkness overlay quad exists under Main Camera
                 Transform existingQuad = mainCam.transform.Find("FoW_ScreenDarkness");
                 GameObject screenDarkness;
                 if (existingQuad == null)
@@ -102,88 +123,134 @@ namespace HunterVsHider.Vision
                     screenDarkness = existingQuad.gameObject;
                 }
 
+                // Put screen darkness on Layer 2 (Ignore Raycast)
+                screenDarkness.layer = 2;
+
                 screenDarkness.transform.localPosition = new Vector3(0f, 0f, 1.5f);
                 screenDarkness.transform.localRotation = Quaternion.identity;
                 screenDarkness.transform.localScale = new Vector3(50f, 50f, 1f);
 
                 Collider col = screenDarkness.GetComponent<Collider>();
-                if (col != null) Destroy(col);
+                if (col != null) SafeDestroy(col);
 
                 MeshRenderer mr = screenDarkness.GetComponent<MeshRenderer>();
                 if (mr != null)
                 {
-                    Shader blitShader = Shader.Find("Custom/FogOfWarBlit");
-                    if (blitShader != null && (mr.sharedMaterial == null || mr.sharedMaterial.shader != blitShader))
+                    if (fowBlitMaterial == null)
                     {
-                        Material blitMat = new Material(blitShader);
-                        blitMat.SetColor("_UnexploredColor", new Color(0.039f, 0.039f, 0.047f, 1.0f));
-                        blitMat.SetColor("_ExploredColor", new Color(0.106f, 0.133f, 0.173f, 0.72f));
-                        blitMat.SetFloat("_UnexploredAlpha", 1.0f);
-                        blitMat.SetFloat("_ExploredAlpha", 0.72f);
-                        mr.material = blitMat;
+                        Shader blitShader = Shader.Find("Custom/FogOfWarBlit");
+                        if (blitShader != null)
+                        {
+                            fowBlitMaterial = new Material(blitShader);
+                        }
                     }
+
+                    if (fowBlitMaterial != null)
+                    {
+                        fowBlitMaterial.SetColor("_UnexploredColor", new Color(0.0f, 0.0f, 0.0f, 1.0f));
+                        fowBlitMaterial.SetColor("_ExploredColor", new Color(0.05f, 0.07f, 0.09f, 0.70f));
+                        fowBlitMaterial.SetFloat("_UnexploredAlpha", 1.0f);
+                        fowBlitMaterial.SetFloat("_ExploredAlpha", 0.70f);
+                        if (combinedFoWRT != null)
+                        {
+                            fowBlitMaterial.SetTexture("_FogOfWarTex", combinedFoWRT);
+                        }
+                        mr.material = fowBlitMaterial;
+                    }
+
                     mr.shadowCastingMode = ShadowCastingMode.Off;
                     mr.receiveShadows = false;
                 }
             }
         }
 
-        private void InitializeResources()
+        public void InitializeResources()
         {
             if (stampShader == null) stampShader = Shader.Find("Custom/FoW_Stamp");
             if (accumulateShader == null) accumulateShader = Shader.Find("Custom/FoW_Accumulate");
 
-            if (stampShader != null) stampMaterial = new Material(stampShader);
-            if (accumulateShader != null) accumulateMaterial = new Material(accumulateShader);
+            if (stampShader != null && stampMaterial == null) stampMaterial = new Material(stampShader);
+            if (accumulateShader != null && accumulateMaterial == null) accumulateMaterial = new Material(accumulateShader);
 
-            activeVisionRT = new RenderTexture(textureResolution, textureResolution, 0, RenderTextureFormat.ARGB32)
+            if (activeVisionRT == null || !activeVisionRT.IsCreated())
             {
-                name = "FoW_ActiveVision_RT",
-                filterMode = FilterMode.Bilinear,
-                wrapMode = TextureWrapMode.Clamp
-            };
-            activeVisionRT.Create();
+                activeVisionRT = new RenderTexture(textureResolution, textureResolution, 0, RenderTextureFormat.ARGB32)
+                {
+                    name = "FoW_ActiveVision_RT",
+                    filterMode = FilterMode.Bilinear,
+                    wrapMode = TextureWrapMode.Clamp
+                };
+                activeVisionRT.Create();
+            }
 
-            combinedFoWRT = new RenderTexture(textureResolution, textureResolution, 0, RenderTextureFormat.ARGB32)
+            if (combinedFoWRT == null || !combinedFoWRT.IsCreated())
             {
-                name = "FoW_Combined_RT",
-                filterMode = FilterMode.Bilinear,
-                wrapMode = TextureWrapMode.Clamp
-            };
-            combinedFoWRT.Create();
+                combinedFoWRT = new RenderTexture(textureResolution, textureResolution, 0, RenderTextureFormat.ARGB32)
+                {
+                    name = "FoW_Combined_RT",
+                    filterMode = FilterMode.Bilinear,
+                    wrapMode = TextureWrapMode.Clamp
+                };
+                combinedFoWRT.Create();
+            }
 
-            prevCombinedFoWRT = new RenderTexture(textureResolution, textureResolution, 0, RenderTextureFormat.ARGB32)
+            if (prevCombinedFoWRT == null || !prevCombinedFoWRT.IsCreated())
             {
-                name = "FoW_PrevCombined_RT",
-                filterMode = FilterMode.Bilinear,
-                wrapMode = TextureWrapMode.Clamp
-            };
-            prevCombinedFoWRT.Create();
+                prevCombinedFoWRT = new RenderTexture(textureResolution, textureResolution, 0, RenderTextureFormat.ARGB32)
+                {
+                    name = "FoW_PrevCombined_RT",
+                    filterMode = FilterMode.Bilinear,
+                    wrapMode = TextureWrapMode.Clamp
+                };
+                prevCombinedFoWRT.Create();
+            }
 
             // Clear textures to 0 (Unexplored)
             ClearTexture(activeVisionRT, Color.clear);
             ClearTexture(combinedFoWRT, Color.clear);
             ClearTexture(prevCombinedFoWRT, Color.clear);
 
-            renderCmdBuffer = new CommandBuffer
+            if (renderCmdBuffer == null)
             {
-                name = "FoW_RenderActiveVision"
-            };
+                renderCmdBuffer = new CommandBuffer
+                {
+                    name = "FoW_RenderActiveVision"
+                };
+            }
+
+            Vector2 size = arenaMax - arenaMin;
+            Shader.SetGlobalTexture("_FogOfWarTex", combinedFoWRT);
+            Shader.SetGlobalVector("_FoWArenaMin", new Vector4(arenaMin.x, arenaMin.y, 0f, 0f));
+            Shader.SetGlobalVector("_FoWArenaSize", new Vector4(size.x, size.y, 0f, 0f));
         }
 
         private void ReleaseResources()
         {
-            if (activeVisionRT != null) { activeVisionRT.Release(); Destroy(activeVisionRT); }
-            if (combinedFoWRT != null) { combinedFoWRT.Release(); Destroy(combinedFoWRT); }
-            if (prevCombinedFoWRT != null) { prevCombinedFoWRT.Release(); Destroy(prevCombinedFoWRT); }
+            if (activeVisionRT != null) { activeVisionRT.Release(); SafeDestroy(activeVisionRT); activeVisionRT = null; }
+            if (combinedFoWRT != null) { combinedFoWRT.Release(); SafeDestroy(combinedFoWRT); combinedFoWRT = null; }
+            if (prevCombinedFoWRT != null) { prevCombinedFoWRT.Release(); SafeDestroy(prevCombinedFoWRT); prevCombinedFoWRT = null; }
 
-            if (stampMaterial != null) Destroy(stampMaterial);
-            if (accumulateMaterial != null) Destroy(accumulateMaterial);
+            if (stampMaterial != null) SafeDestroy(stampMaterial);
+            if (accumulateMaterial != null) SafeDestroy(accumulateMaterial);
             if (renderCmdBuffer != null) { renderCmdBuffer.Release(); renderCmdBuffer = null; }
+        }
+
+        private void SafeDestroy(Object obj)
+        {
+            if (obj == null) return;
+            if (Application.isPlaying)
+            {
+                Destroy(obj);
+            }
+            else
+            {
+                DestroyImmediate(obj);
+            }
         }
 
         private void ClearTexture(RenderTexture rt, Color color)
         {
+            if (rt == null || !rt.IsCreated()) return;
             RenderTexture prev = RenderTexture.active;
             RenderTexture.active = rt;
             GL.Clear(true, true, color);
@@ -213,36 +280,33 @@ namespace HunterVsHider.Vision
 
         public void UpdateFogOfWar()
         {
-            if (stampMaterial == null || accumulateMaterial == null || activeVisionRT == null)
+            if (stampMaterial == null || accumulateMaterial == null || activeVisionRT == null || !activeVisionRT.IsCreated() || renderCmdBuffer == null)
             {
-                return;
+                InitializeResources();
+                if (stampMaterial == null || accumulateMaterial == null || renderCmdBuffer == null) return;
             }
 
-            Camera mainCam = Camera.main;
-            if (mainCam != null)
+            if (activeVisionControllers.Count == 0)
             {
-                mainCam.depthTextureMode |= DepthTextureMode.Depth;
-                Matrix4x4 vp = mainCam.projectionMatrix * mainCam.worldToCameraMatrix;
-                Shader.SetGlobalMatrix("_FoW_InvVP", vp.inverse);
+                VisionController[] controllers = Object.FindObjectsByType<VisionController>(FindObjectsInactive.Exclude);
+                for (int c = 0; c < controllers.Length; c++)
+                {
+                    RegisterVisionController(controllers[c]);
+                }
             }
 
-            // 1. Setup Top-Down Orthographic Projection for the 50x50 arena
             Vector2 size = arenaMax - arenaMin;
-            Vector2 center = (arenaMin + arenaMax) * 0.5f;
 
-            Vector3 eye = new Vector3(center.x, 50f, center.y);
-            Vector3 target = new Vector3(center.x, 0f, center.y);
-            Vector3 up = Vector3.forward; // Maps +Z in world to +Y in UV
+            if (stampMaterial != null)
+            {
+                stampMaterial.SetVector("_FoWArenaMin", new Vector4(arenaMin.x, arenaMin.y, 0f, 0f));
+                stampMaterial.SetVector("_FoWArenaSize", new Vector4(size.x, size.y, 0f, 0f));
+            }
 
-            Matrix4x4 viewMat = Matrix4x4.LookAt(eye, target, up);
-            Matrix4x4 projMat = Matrix4x4.Ortho(-size.x * 0.5f, size.x * 0.5f, -size.y * 0.5f, size.y * 0.5f, 0.1f, 100f);
-            projMat = GL.GetGPUProjectionMatrix(projMat, true);
-
-            // 2. Render all active Police FOV meshes into ActiveVisionRT (Green channel = 1.0)
+            // 1. Render all active Police FOV meshes into ActiveVisionRT (Green channel = 1.0)
             renderCmdBuffer.Clear();
             renderCmdBuffer.SetRenderTarget(activeVisionRT);
             renderCmdBuffer.ClearRenderTarget(true, true, Color.clear);
-            renderCmdBuffer.SetViewProjectionMatrices(viewMat, projMat);
 
             for (int i = 0; i < activeVisionControllers.Count; i++)
             {
@@ -250,25 +314,37 @@ namespace HunterVsHider.Vision
                 if (controller == null || !controller.isActiveAndEnabled) continue;
 
                 var fov = controller.GetComponentInChildren<FieldOfView>() ?? controller.GetComponent<FieldOfView>();
-                if (fov != null && fov.CurrentMesh != null && fov.CurrentMesh.vertexCount > 2)
+                if (fov != null)
                 {
-                    renderCmdBuffer.DrawMesh(fov.CurrentMesh, fov.transform.localToWorldMatrix, stampMaterial);
+                    fov.EnsureComponents();
+                    fov.GenerateFOVMesh();
+                    if (fov.CurrentMesh != null && fov.CurrentMesh.vertexCount > 2)
+                    {
+                        renderCmdBuffer.DrawMesh(fov.CurrentMesh, fov.transform.localToWorldMatrix, stampMaterial);
+                    }
                 }
             }
 
             Graphics.ExecuteCommandBuffer(renderCmdBuffer);
 
-            // 3. Accumulate active vision into persistent discovery buffer (Red = Discovery, Green = Active Vision)
+            // 2. Accumulate active vision into persistent discovery buffer (Red = Discovery, Green = Active Vision)
             accumulateMaterial.SetTexture("_PrevCombinedTex", prevCombinedFoWRT);
             Graphics.Blit(activeVisionRT, combinedFoWRT, accumulateMaterial);
 
             // Ping-pong discovery buffer
             Graphics.Blit(combinedFoWRT, prevCombinedFoWRT);
 
-            // 4. Update Global Shader Properties
+            // 3. Update Global & Material Shader Properties
             Shader.SetGlobalTexture("_FogOfWarTex", combinedFoWRT);
             Shader.SetGlobalVector("_FoWArenaMin", new Vector4(arenaMin.x, arenaMin.y, 0f, 0f));
             Shader.SetGlobalVector("_FoWArenaSize", new Vector4(size.x, size.y, 0f, 0f));
+
+            if (fowBlitMaterial != null)
+            {
+                fowBlitMaterial.SetTexture("_FogOfWarTex", combinedFoWRT);
+                fowBlitMaterial.SetVector("_FoWArenaMin", new Vector4(arenaMin.x, arenaMin.y, 0f, 0f));
+                fowBlitMaterial.SetVector("_FoWArenaSize", new Vector4(size.x, size.y, 0f, 0f));
+            }
         }
 
         /// <summary>

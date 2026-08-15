@@ -23,28 +23,39 @@ namespace HunterVsHider.Player
 
         private void Awake()
         {
-            if (visionController == null)
-            {
-                visionController = GetComponentInParent<VisionController>() ?? GetComponent<VisionController>();
-            }
-
-            mesh = new Mesh
-            {
-                name = "Dynamic_FOV_Mesh"
-            };
-            mesh.MarkDynamic();
-
-            meshFilter = GetComponent<MeshFilter>();
-            meshFilter.mesh = mesh;
+            EnsureComponents();
         }
 
-        private void LateUpdate()
+        public void EnsureComponents()
         {
             if (visionController == null)
             {
                 visionController = GetComponentInParent<VisionController>() ?? GetComponent<VisionController>();
-                if (visionController == null) return;
             }
+
+            if (meshFilter == null)
+            {
+                meshFilter = GetComponent<MeshFilter>();
+            }
+
+            if (mesh == null)
+            {
+                mesh = new Mesh
+                {
+                    name = "Dynamic_FOV_Mesh"
+                };
+                mesh.MarkDynamic();
+                if (meshFilter != null)
+                {
+                    meshFilter.mesh = mesh;
+                }
+            }
+        }
+
+        private void LateUpdate()
+        {
+            EnsureComponents();
+            if (visionController == null) return;
 
             visionController.CalculateVision();
             GenerateFOVMesh();
@@ -52,18 +63,48 @@ namespace HunterVsHider.Player
 
         public void GenerateFOVMesh()
         {
+            EnsureComponents();
+            if (visionController == null) return;
+
             IReadOnlyList<VisionController.RayVisionResult> rays = visionController.RayResults;
+            IReadOnlyList<VisionController.ProximityRayResult> proxRays = visionController.ProximityResults;
+
             if (rays == null || rays.Count < 2) return;
 
             vertices.Clear();
             triangles.Clear();
             uvs.Clear();
 
-            // Transform world ray directions and hit points to local space
             Vector3 localOrigin = new Vector3(0f, meshYOffset, 0f);
 
-            // 1. Build Inner Fan (from origin out to first hit / low obstacle edge)
-            int originIndex = vertices.Count;
+            // 1. Build Proximity Circle Fan
+            if (proxRays != null && proxRays.Count >= 3)
+            {
+                int proxOriginIdx = vertices.Count;
+                vertices.Add(localOrigin);
+                uvs.Add(new Vector2(0.5f, 0.5f));
+
+                int count = proxRays.Count;
+                for (int i = 0; i < count; i++)
+                {
+                    Vector3 worldPt = visionController.transform.position + proxRays[i].direction * proxRays[i].hitDist;
+                    Vector3 localPt = transform.InverseTransformPoint(worldPt);
+                    localPt.y = meshYOffset;
+                    vertices.Add(localPt);
+                    uvs.Add(new Vector2(localPt.x, localPt.z));
+                }
+
+                for (int i = 0; i < count; i++)
+                {
+                    int next = (i + 1) % count;
+                    triangles.Add(proxOriginIdx);
+                    triangles.Add(proxOriginIdx + 1 + i);
+                    triangles.Add(proxOriginIdx + 1 + next);
+                }
+            }
+
+            // 2. Build Directional FOV Wedge Fan (from origin out to first hit / low obstacle edge)
+            int wedgeOriginIdx = vertices.Count;
             vertices.Add(localOrigin);
             uvs.Add(new Vector2(0.5f, 0.5f));
 
@@ -80,22 +121,21 @@ namespace HunterVsHider.Player
 
             for (int i = 0; i < rayCount - 1; i++)
             {
-                int v1 = originIndex;
-                int v2 = originIndex + 1 + i;
-                int v3 = originIndex + 1 + i + 1;
+                int v1 = wedgeOriginIdx;
+                int v2 = wedgeOriginIdx + 1 + i;
+                int v3 = wedgeOriginIdx + 1 + i + 1;
 
                 triangles.Add(v1);
                 triangles.Add(v2);
                 triangles.Add(v3);
             }
 
-            // 2. Build Outer Visible Strips beyond low obstacle shadows
+            // 3. Build Outer Visible Strips beyond low obstacle shadows
             for (int i = 0; i < rayCount - 1; i++)
             {
                 var rA = rays[i];
                 var rB = rays[i + 1];
 
-                // If both adjacent rays have an outer visible segment beyond the shadow
                 if (rA.hasLowObstacleShadow && rB.hasLowObstacleShadow &&
                     rA.shadowEndDist < rA.secondHitDist && rB.shadowEndDist < rB.secondHitDist)
                 {
@@ -121,7 +161,6 @@ namespace HunterVsHider.Player
                     uvs.Add(new Vector2(localInnerB.x, localInnerB.z));
                     uvs.Add(new Vector2(localOuterB.x, localOuterB.z));
 
-                    // Quad: (innerA, outerA, outerB) and (innerA, outerB, innerB)
                     triangles.Add(idx + 0);
                     triangles.Add(idx + 1);
                     triangles.Add(idx + 3);
@@ -132,12 +171,15 @@ namespace HunterVsHider.Player
                 }
             }
 
-            mesh.Clear();
-            mesh.SetVertices(vertices);
-            mesh.SetUVs(0, uvs);
-            mesh.SetTriangles(triangles, 0);
-            mesh.RecalculateNormals();
-            mesh.RecalculateBounds();
+            if (mesh != null)
+            {
+                mesh.Clear();
+                mesh.SetVertices(vertices);
+                mesh.SetUVs(0, uvs);
+                mesh.SetTriangles(triangles, 0);
+                mesh.RecalculateNormals();
+                mesh.RecalculateBounds();
+            }
         }
     }
 }

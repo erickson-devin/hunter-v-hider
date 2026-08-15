@@ -2,10 +2,11 @@ Shader "Custom/FogOfWarBlit"
 {
     Properties
     {
-        _UnexploredColor ("Unexplored Blackout Shroud", Color) = (0.04, 0.04, 0.05, 1.0) // #0A0A0C
-        _ExploredColor ("Explored Memory Ambient Tint", Color) = (0.10, 0.13, 0.17, 0.75) // #1B222C ambient tint
+        _UnexploredColor ("Unexplored Blackout Shroud", Color) = (0.0, 0.0, 0.0, 1.0)
+        _ExploredColor ("Explored Memory Ambient Tint", Color) = (0.05, 0.07, 0.09, 0.70)
         _UnexploredAlpha ("Unexplored Alpha", Range(0, 1)) = 1.0
-        _ExploredAlpha ("Explored Alpha", Range(0, 1)) = 0.72
+        _ExploredAlpha ("Explored Alpha", Range(0, 1)) = 0.70
+        _FogOfWarTex ("Fog of War Texture", 2D) = "black" {}
     }
     SubShader
     {
@@ -30,16 +31,17 @@ Shader "Custom/FogOfWarBlit"
 
             struct v2f
             {
-                float4 vertex : SV_POSITION;
-                float4 screenPos : TEXCOORD0;
+                float4 pos : SV_POSITION;
+                float2 uv : TEXCOORD0;
+                float4 screenPos : TEXCOORD1;
+                float3 ray : TEXCOORD3;
             };
 
             sampler2D _CameraDepthTexture;
             sampler2D _FogOfWarTex;
 
-            float4 _FoWArenaMin;   // (minX, minZ, 0, 0) e.g. (-25, -25, 0, 0)
-            float4 _FoWArenaSize;  // (sizeX, sizeZ, 0, 0) e.g. (50, 50, 0, 0)
-            float4x4 _FoW_InvVP;   // Inverse View-Projection Matrix
+            float4 _FoWArenaMin;   // (-25, -25, 0, 0)
+            float4 _FoWArenaSize;  // (50, 50, 0, 0)
 
             fixed4 _UnexploredColor;
             fixed4 _ExploredColor;
@@ -49,97 +51,75 @@ Shader "Custom/FogOfWarBlit"
             v2f vert (appdata v)
             {
                 v2f o;
-                o.vertex = UnityObjectToClipPos(v.vertex);
-                o.screenPos = ComputeScreenPos(o.vertex);
+                o.pos = UnityObjectToClipPos(v.vertex);
+                o.uv = v.uv;
+                o.screenPos = ComputeScreenPos(o.pos);
+
+                // Compute world space view ray from camera position to quad vertex
+                float3 worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
+                o.ray = worldPos - _WorldSpaceCameraPos;
+
                 return o;
             }
 
             fixed4 frag (v2f i) : SV_Target
             {
                 float2 screenUV = i.screenPos.xy / i.screenPos.w;
+                float3 rayDir = normalize(i.ray);
 
-                // 1. Sample Scene Depth
+                // 1. Determine world position on ground / scene geometry
                 float rawDepth = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, screenUV);
                 float linear01 = Linear01Depth(rawDepth);
+                float eyeDepth = LinearEyeDepth(rawDepth);
 
-                // 2. Reconstruct World Position from Depth
-                #if defined(UNITY_REVERSED_Z)
-                    float clipDepth = rawDepth;
-                #else
-                    float clipDepth = rawDepth * 2.0 - 1.0;
-                #endif
-
-                float2 clipXY = screenUV * 2.0 - 1.0;
-                #if UNITY_UV_STARTS_AT_TOP
-                if (_ProjectionParams.x < 0)
-                    clipXY.y = -clipXY.y;
-                #endif
-
-                float4 clipPos = float4(clipXY, clipDepth, 1.0);
-                float4 worldPos4 = mul(_FoW_InvVP, clipPos);
-                float3 worldPos = worldPos4.xyz / worldPos4.w;
-
-                // If depth is skybox/far plane, project camera ray down to ground plane y = 0
-                if (linear01 >= 0.999 || rawDepth <= 0.0001)
+                float3 worldPos;
+                if (linear01 < 0.999 && rawDepth > 0.0001)
                 {
-                    float3 camPos = _WorldSpaceCameraPos;
-                    float3 rayDir = normalize(worldPos - camPos);
-                    if (abs(rayDir.y) > 0.001)
-                    {
-                        float t = (0.0 - camPos.y) / rayDir.y;
-                        if (t > 0.0)
-                        {
-                            worldPos = camPos + rayDir * t;
-                        }
-                    }
+                    float3 camForward = -UNITY_MATRIX_V[2].xyz;
+                    float cosAngle = max(dot(rayDir, camForward), 0.001);
+                    float dist = eyeDepth / cosAngle;
+                    worldPos = _WorldSpaceCameraPos + rayDir * dist;
+                }
+                else
+                {
+                    // Fallback to ground plane y = 0
+                    float t = -_WorldSpaceCameraPos.y / min(rayDir.y, -0.0001);
+                    worldPos = _WorldSpaceCameraPos + rayDir * t;
                 }
 
-                // 3. Map World Position to Arena UV [0, 1]
+                // 2. Map world position to arena UV [0, 1]
                 float2 arenaSize = max(_FoWArenaSize.xy, float2(1.0, 1.0));
                 float2 arenaUV = (worldPos.xz - _FoWArenaMin.xy) / arenaSize;
 
-                // Out of arena bounds -> Unexplored
+                // Out of arena bounds -> Unexplored Pitch Black
                 if (arenaUV.x < 0.0 || arenaUV.x > 1.0 || arenaUV.y < 0.0 || arenaUV.y > 1.0)
                 {
                     return fixed4(_UnexploredColor.rgb, _UnexploredAlpha);
                 }
 
-                // 4. Sample Fog of War Texture
-                // Red = Discovery / Persistent Explored Memory
-                // Green = Active Vision
+                // 3. Sample Fog of War Texture
                 half4 fow = tex2D(_FogOfWarTex, arenaUV);
                 float discovery = fow.r;
                 float activeVision = fow.g;
 
-                // 5. Tiered Blending:
-                // Value 1.0: Active Vision -> Full clarity (0 alpha)
-                // Value 0.5: Explored Memory -> Ambient tint
-                // Value 0.0: Unexplored -> Blackout shroud overlay
-                float activeSmooth = smoothstep(0.05, 0.95, activeVision);
-                float discoverySmooth = smoothstep(0.05, 0.95, discovery);
-
-                if (activeSmooth >= 0.99)
+                // 4. Tiered visibility:
+                // Active Vision (Green > 0.05): Alpha = 0.0 (Clear vision)
+                // Explored Memory (Red > 0.05): Alpha = ~0.70 (Faint memory overlay)
+                // Unexplored (Red & Green <= 0.05): Alpha = 1.0 (Pitch Black)
+                if (activeVision > 0.05)
                 {
-                    // Active Vision: Full clarity
-                    return fixed4(0, 0, 0, 0);
-                }
-
-                if (activeSmooth > 0.0)
-                {
-                    // Transition between Explored / Active Vision
-                    float alpha = lerp(_ExploredAlpha, 0.0, activeSmooth);
+                    float t = saturate((activeVision - 0.05) / 0.4);
+                    float alpha = lerp(_ExploredAlpha, 0.0, t);
                     return fixed4(_ExploredColor.rgb, alpha);
                 }
-
-                if (discoverySmooth > 0.0)
+                else if (discovery > 0.05)
                 {
-                    // Transition between Unexplored / Explored
-                    float alpha = lerp(_UnexploredAlpha, _ExploredAlpha, discoverySmooth);
-                    fixed3 col = lerp(_UnexploredColor.rgb, _ExploredColor.rgb, discoverySmooth);
+                    float t = saturate((discovery - 0.05) / 0.4);
+                    float alpha = lerp(_UnexploredAlpha, _ExploredAlpha, t);
+                    fixed3 col = lerp(_UnexploredColor.rgb, _ExploredColor.rgb, t);
                     return fixed4(col, alpha);
                 }
 
-                // Completely Unexplored: Full blackout
                 return fixed4(_UnexploredColor.rgb, _UnexploredAlpha);
             }
             ENDCG

@@ -17,6 +17,10 @@ namespace HunterVsHider.Vision
         [Range(10, 360)]
         [SerializeField] private int rayCount = 120;
 
+        [Header("Proximity Settings")]
+        [SerializeField] private float proximityRadius = 2.5f;
+        [SerializeField] private int proximityRayCount = 36;
+
         [Header("Layer Masks")]
         [SerializeField] private LayerMask obstacleHighLayer;
         [SerializeField] private LayerMask obstacleLowLayer;
@@ -34,14 +38,23 @@ namespace HunterVsHider.Vision
             public float secondHitDist;
         }
 
+        public struct ProximityRayResult
+        {
+            public Vector3 direction;
+            public float hitDist;
+        }
+
         private readonly List<RayVisionResult> rayResults = new List<RayVisionResult>();
+        private readonly List<ProximityRayResult> proximityResults = new List<ProximityRayResult>();
 
         public float ViewAngle => viewAngle;
         public float ViewDistance => viewDistance;
         public int RayCount => rayCount;
+        public float ProximityRadius => proximityRadius;
         public Vector3 EyeOffset => eyeOffset;
         public Vector3 EyeWorldPosition => transform.position + eyeOffset;
         public IReadOnlyList<RayVisionResult> RayResults => rayResults;
+        public IReadOnlyList<ProximityRayResult> ProximityResults => proximityResults;
 
         private void Awake()
         {
@@ -120,11 +133,34 @@ namespace HunterVsHider.Vision
         public void CalculateVision()
         {
             rayResults.Clear();
+            proximityResults.Clear();
 
             Vector3 eyePos = EyeWorldPosition;
+            int combinedMask = obstacleHighLayer | obstacleLowLayer;
+
+            // 1. Calculate 360-Degree Immediate Proximity Circle
+            float proxStep = 360f / Mathf.Max(12, proximityRayCount);
+            for (int i = 0; i < proximityRayCount; i++)
+            {
+                float angle = i * proxStep;
+                Vector3 dir = Quaternion.Euler(0f, angle, 0f) * Vector3.forward;
+                float hitDist = proximityRadius;
+
+                if (Physics.Raycast(eyePos, dir, out RaycastHit hit, proximityRadius, combinedMask))
+                {
+                    hitDist = hit.distance;
+                }
+
+                proximityResults.Add(new ProximityRayResult
+                {
+                    direction = dir,
+                    hitDist = hitDist
+                });
+            }
+
+            // 2. Calculate Directional FOV Wedge with 2.5D Height Occlusion
             float startAngle = -viewAngle / 2f;
             float angleStep = viewAngle / rayCount;
-            int combinedMask = obstacleHighLayer | obstacleLowLayer;
 
             for (int i = 0; i <= rayCount; i++)
             {
@@ -231,6 +267,17 @@ namespace HunterVsHider.Vision
             toTarget.y = 0f;
             float horizontalDist = toTarget.magnitude;
 
+            // Proximity check
+            if (horizontalDist <= proximityRadius)
+            {
+                Vector3 checkPt = targetPos + Vector3.up * targetHeight;
+                Vector3 dir = checkPt - eyePos;
+                if (!Physics.Raycast(eyePos, dir.normalized, out RaycastHit hit, dir.magnitude, obstacleHighLayer))
+                {
+                    return true;
+                }
+            }
+
             if (horizontalDist > viewDistance) return false;
 
             float angleToTarget = Vector3.Angle(transform.forward, toTarget.normalized);
@@ -244,19 +291,19 @@ namespace HunterVsHider.Vision
             int combinedMask = obstacleHighLayer | obstacleLowLayer;
 
             // Direct line of sight raycast
-            if (Physics.Raycast(eyePos, rayDir.normalized, out RaycastHit hit, rayLen, combinedMask))
+            if (Physics.Raycast(eyePos, rayDir.normalized, out RaycastHit sightHit, rayLen, combinedMask))
             {
                 // If we hit high obstacle before target, blocked completely
-                if ((obstacleHighLayer.value & (1 << hit.collider.gameObject.layer)) != 0)
+                if ((obstacleHighLayer.value & (1 << sightHit.collider.gameObject.layer)) != 0)
                 {
                     return false;
                 }
 
                 // If we hit low obstacle, check if target is hidden behind low cover
-                if ((obstacleLowLayer.value & (1 << hit.collider.gameObject.layer)) != 0)
+                if ((obstacleLowLayer.value & (1 << sightHit.collider.gameObject.layer)) != 0)
                 {
-                    float obsTop = hit.collider.bounds.max.y;
-                    float hitDist = Vector3.Distance(new Vector3(eyePos.x, 0, eyePos.z), new Vector3(hit.point.x, 0, hit.point.z));
+                    float obsTop = sightHit.collider.bounds.max.y;
+                    float hitDist = Vector3.Distance(new Vector3(eyePos.x, 0, eyePos.z), new Vector3(sightHit.point.x, 0, sightHit.point.z));
                     
                     if (eyePos.y > obsTop && hitDist > 0.01f)
                     {
@@ -264,7 +311,6 @@ namespace HunterVsHider.Vision
                         float rayYAtTarget = obsTop - slope * (horizontalDist - hitDist);
                         if (targetCheckPoint.y <= rayYAtTarget)
                         {
-                            // Target is occluded in the shadow behind low box
                             return false;
                         }
                     }
@@ -283,6 +329,7 @@ namespace HunterVsHider.Vision
             Gizmos.color = Color.yellow;
             Vector3 eyePos = EyeWorldPosition;
             Gizmos.DrawWireSphere(eyePos, 0.2f);
+            Gizmos.DrawWireSphere(transform.position, proximityRadius);
 
             Vector3 leftDir = Quaternion.Euler(0f, -viewAngle / 2f, 0f) * transform.forward;
             Vector3 rightDir = Quaternion.Euler(0f, viewAngle / 2f, 0f) * transform.forward;

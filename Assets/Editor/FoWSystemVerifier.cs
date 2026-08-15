@@ -76,12 +76,12 @@ namespace HunterVsHider.EditorScripts
             FogOfWarManager fowManager = fowManagerObj != null ? fowManagerObj.GetComponent<FogOfWarManager>() : null;
             if (fowManager != null)
             {
-                Debug.Log("[PASS] Test 3a: FogOfWarManager exists in scene.");
+                Debug.Log("[PASS] Test 3: FogOfWarManager exists in scene.");
                 passed++;
             }
             else
             {
-                Debug.LogError("[FAIL] Test 3a: FogOfWarManager missing in scene!");
+                Debug.LogError("[FAIL] Test 3: FogOfWarManager missing in scene!");
                 failed++;
             }
 
@@ -105,15 +105,29 @@ namespace HunterVsHider.EditorScripts
                 failed++;
             }
 
-            // Test 5: Player Setup
+            // Test 5: Player Setup & Proximity Vision
             GameObject playerObj = GameObject.FindGameObjectWithTag("Player") ?? GameObject.Find("Player");
             VisionController vc = playerObj != null ? playerObj.GetComponent<VisionController>() : null;
             FieldOfView fov = playerObj != null ? playerObj.GetComponentInChildren<FieldOfView>() : null;
 
             if (playerObj != null && vc != null && fov != null)
             {
-                Debug.Log($"[PASS] Test 5: Player prefab instantiated at {playerObj.transform.position} with VisionController (Eye: {vc.EyeOffset}, FOV: {vc.ViewAngle}°) and FieldOfView.");
-                passed++;
+                vc.CalculateVision();
+                fov.GenerateFOVMesh();
+
+                bool hasProximity = vc.ProximityRadius > 0f && vc.ProximityResults.Count > 0;
+                bool hasMesh = fov.CurrentMesh != null && fov.CurrentMesh.vertexCount > 5;
+
+                if (hasProximity && hasMesh)
+                {
+                    Debug.Log($"[PASS] Test 5: Player prefab verified with VisionController (Eye: {vc.EyeOffset}, FOV: {vc.ViewAngle}°, Proximity: {vc.ProximityRadius}m) and generated FOV Mesh ({fov.CurrentMesh.vertexCount} verts, {fov.CurrentMesh.triangles.Length / 3} tris).");
+                    passed++;
+                }
+                else
+                {
+                    Debug.LogError($"[FAIL] Test 5: FOV Mesh or Proximity calculation failed! Prox: {hasProximity}, Mesh: {hasMesh}");
+                    failed++;
+                }
             }
             else
             {
@@ -127,7 +141,7 @@ namespace HunterVsHider.EditorScripts
 
             if (screenDarkness != null && screenMr != null && screenMr.sharedMaterial != null && screenMr.sharedMaterial.shader.name == "Custom/FogOfWarBlit")
             {
-                Debug.Log("[PASS] Test 6: FoW_ScreenDarkness attached to Main Camera with Custom/FogOfWarBlit material.");
+                Debug.Log($"[PASS] Test 6: FoW_ScreenDarkness attached to Main Camera (Layer: {screenDarkness.gameObject.layer} - IgnoreRaycast/NonBlocking) with Custom/FogOfWarBlit material.");
                 passed++;
             }
             else
@@ -147,6 +161,25 @@ namespace HunterVsHider.EditorScripts
             {
                 Debug.LogError($"[FAIL] Test 7: Found {targets.Length} targets with TargetVisibility (expected >= 3)!");
                 failed++;
+            }
+
+            // Test 8: Fog of War Manager Update & Active Stamping
+            if (fowManager != null && vc != null)
+            {
+                fowManager.EnsureCameraSetup();
+                fowManager.RegisterVisionController(vc);
+                fowManager.UpdateFogOfWar();
+
+                if (fowManager.CombinedFoWTexture != null && fowManager.ActiveVisionTexture != null)
+                {
+                    Debug.Log($"[PASS] Test 8: FogOfWarManager executed active vision stamping and accumulation blit into {fowManager.CombinedFoWTexture.width}x{fowManager.CombinedFoWTexture.height} RT.");
+                    passed++;
+                }
+                else
+                {
+                    Debug.LogError("[FAIL] Test 8: FoW RenderTextures failed to initialize!");
+                    failed++;
+                }
             }
 
             Debug.Log("=================================================");

@@ -168,6 +168,8 @@ namespace HunterVsHider.EditorScripts
                 screenDarkness.transform.localRotation = Quaternion.identity;
                 screenDarkness.transform.localScale = new Vector3(50, 50, 1);
 
+                screenDarkness.layer = 2; // Ignore Raycast (non-interactive)
+
                 Collider col = screenDarkness.GetComponent<Collider>();
                 if (col != null) { Object.DestroyImmediate(col); sceneModified = true; }
 

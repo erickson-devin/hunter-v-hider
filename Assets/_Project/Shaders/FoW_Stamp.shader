@@ -3,6 +3,8 @@ Shader "Custom/FoW_Stamp"
     Properties
     {
         _Color ("Color", Color) = (0, 1, 0, 1)
+        _FoWArenaMin ("Arena Min", Vector) = (-25, -25, 0, 0)
+        _FoWArenaSize ("Arena Size", Vector) = (50, 50, 0, 0)
     }
     SubShader
     {
@@ -19,6 +21,9 @@ Shader "Custom/FoW_Stamp"
             #pragma fragment frag
             #include "UnityCG.cginc"
 
+            float4 _FoWArenaMin;
+            float4 _FoWArenaSize;
+
             struct appdata
             {
                 float4 vertex : POSITION;
@@ -32,7 +37,11 @@ Shader "Custom/FoW_Stamp"
             v2f vert (appdata v)
             {
                 v2f o;
-                o.vertex = UnityObjectToClipPos(v.vertex);
+                float3 worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
+                float2 arenaSize = max(_FoWArenaSize.xy, float2(1.0, 1.0));
+                float2 arenaUV = (worldPos.xz - _FoWArenaMin.xy) / arenaSize;
+                float2 clipXY = arenaUV * 2.0 - 1.0;
+                o.vertex = float4(clipXY.x, clipXY.y, 0.5, 1.0);
                 return o;
             }
 
