@@ -313,6 +313,7 @@ namespace HunterVsHider.Vision
                 var controller = activeVisionControllers[i];
                 if (controller == null || !controller.isActiveAndEnabled) continue;
 
+                controller.CalculateVision();
                 var fov = controller.GetComponentInChildren<FieldOfView>() ?? controller.GetComponent<FieldOfView>();
                 if (fov != null)
                 {

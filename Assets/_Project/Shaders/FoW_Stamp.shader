@@ -41,6 +41,9 @@ Shader "Custom/FoW_Stamp"
                 float2 arenaSize = max(_FoWArenaSize.xy, float2(1.0, 1.0));
                 float2 arenaUV = (worldPos.xz - _FoWArenaMin.xy) / arenaSize;
                 float2 clipXY = arenaUV * 2.0 - 1.0;
+                #if UNITY_UV_STARTS_AT_TOP
+                clipXY.y = -clipXY.y;
+                #endif
                 o.vertex = float4(clipXY.x, clipXY.y, 0.5, 1.0);
                 return o;
             }
