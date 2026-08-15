@@ -1,9 +1,19 @@
 using UnityEngine;
+using HunterVsHider.Gameplay;
 
+[RequireComponent(typeof(TargetVisibility))]
 public class TargetDummy : MonoBehaviour, IDamageable
 {
     [SerializeField] private float maxHealth = 100f;
     private float currentHealth;
+
+    private void Awake()
+    {
+        if (GetComponent<TargetVisibility>() == null)
+        {
+            gameObject.AddComponent<TargetVisibility>();
+        }
+    }
 
     private void Start()
     {
