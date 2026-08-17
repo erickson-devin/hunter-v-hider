@@ -27,6 +27,8 @@ namespace HunterVsHider.Gameplay
 
         private void Update()
         {
+            if (FogOfWarManager.IsShuttingDown) return;
+
             bool shouldBeVisible = false;
 
             if (FogOfWarManager.Instance != null)

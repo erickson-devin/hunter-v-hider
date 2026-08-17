@@ -15,9 +15,9 @@ namespace HunterVsHider.Player
 
         private Mesh mesh;
         private MeshFilter meshFilter;
-        private readonly List<Vector3> vertices = new List<Vector3>();
-        private readonly List<int> triangles = new List<int>();
-        private readonly List<Vector2> uvs = new List<Vector2>();
+        private readonly List<Vector3> vertices = new List<Vector3>(1024);
+        private readonly List<int> triangles = new List<int>(3072);
+        private readonly List<Vector2> uvs = new List<Vector2>(1024);
 
         public Mesh CurrentMesh => mesh;
 
@@ -52,6 +52,42 @@ namespace HunterVsHider.Player
             }
         }
 
+        private void OnDisable()
+        {
+            CleanupMesh();
+        }
+
+        private void OnDestroy()
+        {
+            CleanupMesh();
+        }
+
+        private void CleanupMesh()
+        {
+            if (mesh != null)
+            {
+                if (meshFilter != null && meshFilter.sharedMesh == mesh)
+                {
+                    meshFilter.sharedMesh = null;
+                }
+                SafeDestroy(mesh);
+                mesh = null;
+            }
+        }
+
+        private static void SafeDestroy(Object obj)
+        {
+            if (obj == null) return;
+            if (Application.isPlaying)
+            {
+                Destroy(obj);
+            }
+            else
+            {
+                DestroyImmediate(obj);
+            }
+        }
+
         private void LateUpdate()
         {
             EnsureComponents();
@@ -75,19 +111,21 @@ namespace HunterVsHider.Player
             triangles.Clear();
             uvs.Clear();
 
-            Vector3 localOrigin = new Vector3(0f, meshYOffset, 0f);
-
-            // 1. Build Proximity Circle Fan
+            // 1. Build Proximity Circle Fan (Centered around player base position)
             if (proxRays != null && proxRays.Count >= 3)
             {
+                Vector3 proxWorldOrigin = visionController.transform.position;
+                Vector3 proxLocalOrigin = transform.InverseTransformPoint(proxWorldOrigin);
+                proxLocalOrigin.y = meshYOffset;
+
                 int proxOriginIdx = vertices.Count;
-                vertices.Add(localOrigin);
+                vertices.Add(proxLocalOrigin);
                 uvs.Add(new Vector2(0.5f, 0.5f));
 
                 int count = proxRays.Count;
                 for (int i = 0; i < count; i++)
                 {
-                    Vector3 worldPt = visionController.transform.position + proxRays[i].direction * proxRays[i].hitDist;
+                    Vector3 worldPt = proxWorldOrigin + proxRays[i].direction * proxRays[i].hitDist;
                     Vector3 localPt = transform.InverseTransformPoint(worldPt);
                     localPt.y = meshYOffset;
                     vertices.Add(localPt);
@@ -103,15 +141,19 @@ namespace HunterVsHider.Player
                 }
             }
 
-            // 2. Build Directional FOV Wedge Fan (from origin out to first hit / low obstacle edge)
+            // 2. Build Directional FOV Wedge Fan (Apex locked strictly to active weapon MuzzlePoint / EyeWorldPosition)
+            Vector3 eyeWorldPos = visionController.EyeWorldPosition;
+            Vector3 wedgeLocalOrigin = transform.InverseTransformPoint(eyeWorldPos);
+            wedgeLocalOrigin.y = meshYOffset;
+
             int wedgeOriginIdx = vertices.Count;
-            vertices.Add(localOrigin);
+            vertices.Add(wedgeLocalOrigin);
             uvs.Add(new Vector2(0.5f, 0.5f));
 
             int rayCount = rays.Count;
             for (int i = 0; i < rayCount; i++)
             {
-                Vector3 worldHit = visionController.EyeWorldPosition + rays[i].direction * rays[i].firstHitDist;
+                Vector3 worldHit = eyeWorldPos + rays[i].direction * rays[i].firstHitDist;
                 Vector3 localHit = transform.InverseTransformPoint(worldHit);
                 localHit.y = meshYOffset;
 
@@ -139,11 +181,11 @@ namespace HunterVsHider.Player
                 if (rA.hasLowObstacleShadow && rB.hasLowObstacleShadow &&
                     rA.shadowEndDist < rA.secondHitDist && rB.shadowEndDist < rB.secondHitDist)
                 {
-                    Vector3 worldInnerA = visionController.EyeWorldPosition + rA.direction * rA.shadowEndDist;
-                    Vector3 worldOuterA = visionController.EyeWorldPosition + rA.direction * rA.secondHitDist;
+                    Vector3 worldInnerA = eyeWorldPos + rA.direction * rA.shadowEndDist;
+                    Vector3 worldOuterA = eyeWorldPos + rA.direction * rA.secondHitDist;
 
-                    Vector3 worldInnerB = visionController.EyeWorldPosition + rB.direction * rB.shadowEndDist;
-                    Vector3 worldOuterB = visionController.EyeWorldPosition + rB.direction * rB.secondHitDist;
+                    Vector3 worldInnerB = eyeWorldPos + rB.direction * rB.shadowEndDist;
+                    Vector3 worldOuterB = eyeWorldPos + rB.direction * rB.secondHitDist;
 
                     Vector3 localInnerA = transform.InverseTransformPoint(worldInnerA); localInnerA.y = meshYOffset;
                     Vector3 localOuterA = transform.InverseTransformPoint(worldOuterA); localOuterA.y = meshYOffset;
@@ -173,11 +215,10 @@ namespace HunterVsHider.Player
 
             if (mesh != null)
             {
-                mesh.Clear();
+                mesh.Clear(false);
                 mesh.SetVertices(vertices);
                 mesh.SetUVs(0, uvs);
-                mesh.SetTriangles(triangles, 0);
-                mesh.RecalculateNormals();
+                mesh.SetTriangles(triangles, 0, false);
                 mesh.RecalculateBounds();
             }
         }

@@ -8,14 +8,30 @@ namespace HunterVsHider.Vision
     public class FogOfWarManager : MonoBehaviour
     {
         private static FogOfWarManager _instance;
+        private static bool _isShuttingDown = false;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStaticState()
+        {
+            _instance = null;
+            _isShuttingDown = false;
+        }
+
+        public static bool IsShuttingDown => _isShuttingDown;
+
         public static FogOfWarManager Instance
         {
             get
             {
+                if (_isShuttingDown)
+                {
+                    return null;
+                }
+
                 if (_instance == null)
                 {
                     _instance = Object.FindAnyObjectByType<FogOfWarManager>();
-                    if (_instance == null && Application.isPlaying)
+                    if (_instance == null && Application.isPlaying && !_isShuttingDown)
                     {
                         GameObject go = new GameObject("_FogOfWarManager");
                         _instance = go.AddComponent<FogOfWarManager>();
@@ -84,6 +100,16 @@ namespace HunterVsHider.Vision
                 GameObject player = GameObject.FindWithTag("Player") ?? GameObject.Find("Player");
                 if (player != null) playerTransform = player.transform;
             }
+        }
+
+        private void OnApplicationQuit()
+        {
+            _isShuttingDown = true;
+        }
+
+        private void OnDisable()
+        {
+            ReleaseResources();
         }
 
         private void OnDestroy()

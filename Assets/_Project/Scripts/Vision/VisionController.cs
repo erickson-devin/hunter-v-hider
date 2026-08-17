@@ -9,6 +9,8 @@ namespace HunterVsHider.Vision
     {
         [Header("Eye / Origin Settings")]
         [SerializeField] private Vector3 eyeOffset = new Vector3(0f, 1.8f, 0f);
+        [SerializeField] private Transform originTransform;
+        [SerializeField] private Transform aimDirectionTransform;
 
         [Header("FOV Settings")]
         [Range(10f, 360f)]
@@ -29,6 +31,8 @@ namespace HunterVsHider.Vision
         [SerializeField] private float defaultLowObstacleHeight = 1.0f;
         [SerializeField] private float groundPlaneY = 0f;
 
+        private PlayerWeaponManager cachedWeaponManager;
+
         public struct RayVisionResult
         {
             public Vector3 direction;
@@ -44,20 +48,88 @@ namespace HunterVsHider.Vision
             public float hitDist;
         }
 
-        private readonly List<RayVisionResult> rayResults = new List<RayVisionResult>();
-        private readonly List<ProximityRayResult> proximityResults = new List<ProximityRayResult>();
+        private readonly List<RayVisionResult> rayResults = new List<RayVisionResult>(360);
+        private readonly List<ProximityRayResult> proximityResults = new List<ProximityRayResult>(72);
 
         public float ViewAngle => viewAngle;
         public float ViewDistance => viewDistance;
         public int RayCount => rayCount;
         public float ProximityRadius => proximityRadius;
         public Vector3 EyeOffset => eyeOffset;
-        public Vector3 EyeWorldPosition => transform.position + eyeOffset;
+
+        public Transform OriginTransform
+        {
+            get
+            {
+                if (originTransform == null)
+                {
+                    if (cachedWeaponManager == null)
+                    {
+                        cachedWeaponManager = GetComponent<PlayerWeaponManager>() ?? GetComponentInParent<PlayerWeaponManager>();
+                    }
+                    if (cachedWeaponManager != null && cachedWeaponManager.ActiveMuzzlePoint != null)
+                    {
+                        return cachedWeaponManager.ActiveMuzzlePoint;
+                    }
+
+                    // Fallback: search for child named "MuzzlePoint"
+                    Transform muzzle = transform.Find("WeaponHolder/Gun_Pistol/MuzzlePoint") ??
+                                       transform.Find("WeaponHolder/Gun_Rifle/MuzzlePoint");
+                    if (muzzle != null) return muzzle;
+                }
+                return originTransform;
+            }
+            set => originTransform = value;
+        }
+
+        public Vector3 EyeWorldPosition
+        {
+            get
+            {
+                Transform ot = OriginTransform;
+                return ot != null ? ot.position : (transform.position + eyeOffset);
+            }
+        }
+
+        public Vector3 ForwardDirection
+        {
+            get
+            {
+                Transform ot = OriginTransform;
+                if (ot != null)
+                {
+                    Vector3 fwd = ot.forward;
+                    fwd.y = 0f;
+                    if (fwd.sqrMagnitude > 0.001f) return fwd.normalized;
+                }
+
+                if (aimDirectionTransform != null)
+                {
+                    Vector3 fwd = aimDirectionTransform.forward;
+                    fwd.y = 0f;
+                    if (fwd.sqrMagnitude > 0.001f) return fwd.normalized;
+                }
+
+                Transform wh = transform.Find("WeaponHolder");
+                if (wh != null)
+                {
+                    Vector3 fwd = wh.forward;
+                    fwd.y = 0f;
+                    if (fwd.sqrMagnitude > 0.001f) return fwd.normalized;
+                }
+
+                Vector3 tfFwd = transform.forward;
+                tfFwd.y = 0f;
+                return tfFwd.sqrMagnitude > 0.001f ? tfFwd.normalized : Vector3.forward;
+            }
+        }
+
         public IReadOnlyList<RayVisionResult> RayResults => rayResults;
         public IReadOnlyList<ProximityRayResult> ProximityResults => proximityResults;
 
         private void Awake()
         {
+            cachedWeaponManager = GetComponent<PlayerWeaponManager>() ?? GetComponentInParent<PlayerWeaponManager>();
             ValidateLayers();
             EnsureFOVIndicator();
         }
@@ -96,7 +168,7 @@ namespace HunterVsHider.Vision
 
         private void OnEnable()
         {
-            if (FogOfWarManager.Instance != null)
+            if (!FogOfWarManager.IsShuttingDown && FogOfWarManager.Instance != null)
             {
                 FogOfWarManager.Instance.RegisterVisionController(this);
             }
@@ -104,7 +176,7 @@ namespace HunterVsHider.Vision
 
         private void OnDisable()
         {
-            if (FogOfWarManager.Instance != null)
+            if (!FogOfWarManager.IsShuttingDown && FogOfWarManager.Instance != null)
             {
                 FogOfWarManager.Instance.UnregisterVisionController(this);
             }
@@ -159,13 +231,14 @@ namespace HunterVsHider.Vision
             }
 
             // 2. Calculate Directional FOV Wedge with 2.5D Height Occlusion
+            Vector3 baseForward = ForwardDirection;
             float startAngle = -viewAngle / 2f;
             float angleStep = viewAngle / rayCount;
 
             for (int i = 0; i <= rayCount; i++)
             {
                 float currentAngle = startAngle + i * angleStep;
-                Vector3 dir = Quaternion.Euler(0f, currentAngle, 0f) * transform.forward;
+                Vector3 dir = Quaternion.Euler(0f, currentAngle, 0f) * baseForward;
                 dir.y = 0f;
                 dir.Normalize();
 
@@ -280,7 +353,8 @@ namespace HunterVsHider.Vision
 
             if (horizontalDist > viewDistance) return false;
 
-            float angleToTarget = Vector3.Angle(transform.forward, toTarget.normalized);
+            Vector3 baseForward = ForwardDirection;
+            float angleToTarget = Vector3.Angle(baseForward, toTarget.normalized);
             if (angleToTarget > viewAngle / 2f) return false;
 
             Vector3 targetCheckPoint = targetPos + Vector3.up * targetHeight;
@@ -331,8 +405,9 @@ namespace HunterVsHider.Vision
             Gizmos.DrawWireSphere(eyePos, 0.2f);
             Gizmos.DrawWireSphere(transform.position, proximityRadius);
 
-            Vector3 leftDir = Quaternion.Euler(0f, -viewAngle / 2f, 0f) * transform.forward;
-            Vector3 rightDir = Quaternion.Euler(0f, viewAngle / 2f, 0f) * transform.forward;
+            Vector3 baseForward = ForwardDirection;
+            Vector3 leftDir = Quaternion.Euler(0f, -viewAngle / 2f, 0f) * baseForward;
+            Vector3 rightDir = Quaternion.Euler(0f, viewAngle / 2f, 0f) * baseForward;
 
             Gizmos.color = Color.cyan;
             Gizmos.DrawRay(eyePos, leftDir * viewDistance);

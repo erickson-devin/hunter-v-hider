@@ -8,6 +8,8 @@ namespace HunterVsHider.Weapons
         [Header("References")]
         [SerializeField] private Transform muzzlePoint;
 
+        public Transform MuzzlePoint => muzzlePoint;
+
         [Header("Gun Stats")]
         [SerializeField] private int maxAmmo = 30;
         [SerializeField] private float fireRate = 0.15f;
@@ -28,6 +30,10 @@ namespace HunterVsHider.Weapons
 
         private void Awake()
         {
+            if (muzzlePoint == null)
+            {
+                muzzlePoint = transform.Find("MuzzlePoint");
+            }
             currentAmmo = maxAmmo;
             isReloading = false;
             audioSource = GetComponent<AudioSource>();
@@ -41,7 +47,7 @@ namespace HunterVsHider.Weapons
             if (fireSFX == null) fireSFX = CreateSynthClip("Fire", 440f, 0.1f);
             if (reloadSFX == null) reloadSFX = CreateSynthClip("Reload", 220f, 0.5f);
             if (dryFireSFX == null) dryFireSFX = CreateSynthClip("DryFire", 880f, 0.05f);
-            if (impactSFX == null) impactSFX = CreateSynthClip("Impact", 100f, 0.15f);
+            impactSFX = impactSFX ?? CreateSynthClip("Impact", 100f, 0.15f);
         }
 
         private void Start()

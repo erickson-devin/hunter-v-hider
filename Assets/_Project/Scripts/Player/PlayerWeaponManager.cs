@@ -10,6 +10,9 @@ namespace HunterVsHider.Player
 
         private Gun activeGun;
 
+        public Gun ActiveGun => activeGun;
+        public Transform ActiveMuzzlePoint => activeGun != null ? activeGun.MuzzlePoint : null;
+
         private void Awake()
         {
             Transform holder = transform.Find("WeaponHolder");
