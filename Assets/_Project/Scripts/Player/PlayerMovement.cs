@@ -1,9 +1,10 @@
 using UnityEngine;
+using Unity.Netcode;
 
 namespace HunterVsHider.Player
 {
     [RequireComponent(typeof(Rigidbody))]
-    public class PlayerMovement : MonoBehaviour
+    public class PlayerMovement : NetworkBehaviour
     {
         [Header("Movement Settings")]
         public float moveSpeed = 5f;
@@ -21,8 +22,21 @@ namespace HunterVsHider.Player
             WeaponHolder = transform.Find("WeaponHolder");
         }
 
+        public override void OnNetworkSpawn()
+        {
+            base.OnNetworkSpawn();
+
+            // For remote clones, set Rigidbody to kinematic so NetworkTransform handles interpolation cleanly
+            if (!IsOwner)
+            {
+                rb.isKinematic = true;
+            }
+        }
+
         private void Update()
         {
+            if (!IsOwner) return;
+
             // Strict lifecycle separation: Read input in Update
             movementInput.x = Input.GetAxisRaw("Horizontal");
             movementInput.z = Input.GetAxisRaw("Vertical");
@@ -53,6 +67,8 @@ namespace HunterVsHider.Player
 
         private void FixedUpdate()
         {
+            if (!IsOwner) return;
+
             // Strict lifecycle separation: Apply physics in FixedUpdate
             if (movementInput.sqrMagnitude > 0.01f)
             {

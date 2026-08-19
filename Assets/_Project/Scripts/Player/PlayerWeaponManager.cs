@@ -34,6 +34,10 @@ namespace HunterVsHider.Player
 
         private void Update()
         {
+            // If networked, only accept input from the owning client
+            var netObj = GetComponent<Unity.Netcode.NetworkObject>();
+            if (netObj != null && netObj.IsSpawned && !netObj.IsOwner) return;
+
             // Weapon Swapping
             if (Input.GetKeyDown(KeyCode.Alpha1) && pistol != null)
             {
