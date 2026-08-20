@@ -402,7 +402,7 @@ namespace HunterVsHider.Player
             }
         }
 
-        private void ApplyTeleport(Vector3 targetPosition, Quaternion targetRotation)
+        public void ApplyTeleport(Vector3 targetPosition, Quaternion targetRotation)
         {
             transform.position = targetPosition;
             transform.rotation = targetRotation;

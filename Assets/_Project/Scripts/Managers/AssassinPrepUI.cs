@@ -21,6 +21,9 @@ namespace HunterVsHider.Managers
         [Tooltip("Button to trigger random map seed generation.")]
         public Button buttonGenerateMap;
 
+        [Tooltip("Button to transition from Prep Phase into Combat Phase.")]
+        public Button buttonStartCombat;
+
         [Tooltip("Optional status / seed label.")]
         public TMP_Text textSeedInfo;
 
@@ -45,6 +48,12 @@ namespace HunterVsHider.Managers
             {
                 buttonGenerateMap.onClick.RemoveAllListeners();
                 buttonGenerateMap.onClick.AddListener(OnGenerateMapClicked);
+            }
+
+            if (buttonStartCombat != null)
+            {
+                buttonStartCombat.onClick.RemoveAllListeners();
+                buttonStartCombat.onClick.AddListener(OnStartCombatClicked);
             }
 
             SetUIVisible(false);
@@ -114,6 +123,11 @@ namespace HunterVsHider.Managers
             {
                 buttonGenerateMap.interactable = visible;
             }
+
+            if (buttonStartCombat != null)
+            {
+                buttonStartCombat.interactable = visible;
+            }
         }
 
         public void OnGenerateMapClicked()
@@ -126,6 +140,18 @@ namespace HunterVsHider.Managers
 
             Debug.Log("[AssassinPrepUI] Assassin requested new random map generation.");
             MatchManager.Singleton.RequestGenerateNewMap();
+        }
+
+        public void OnStartCombatClicked()
+        {
+            if (MatchManager.Singleton == null)
+            {
+                Debug.LogWarning("[AssassinPrepUI] MatchManager.Singleton not found!");
+                return;
+            }
+
+            Debug.Log("[AssassinPrepUI] Assassin requested start of Combat Phase.");
+            MatchManager.Singleton.RequestStartCombatPhase();
         }
 
         private PlayerNetworkState GetLocalPlayerState()

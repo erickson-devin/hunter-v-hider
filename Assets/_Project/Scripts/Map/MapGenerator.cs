@@ -151,14 +151,32 @@ namespace HunterVsHider.Map
             currentGeneratedSeed = -1;
         }
 
-        /// <summary>
-        /// Deterministically generates the 3D maze environment from the specified seed.
-        /// </summary>
-        /// <param name="seed">Synchronized random integer seed.</param>
+        private void PurgeLegacyDummies()
+        {
+            var allObjs = FindObjectsByType<GameObject>(FindObjectsInactive.Include);
+            foreach (var obj in allObjs)
+            {
+                if (obj == null) continue;
+                string objName = obj.name.ToLower();
+                if (objName.Contains("dummy") || objName.Contains("targetdummy") || objName.Contains("testdummy") || obj.CompareTag("Enemy"))
+                {
+#if UNITY_EDITOR
+                    if (!Application.isPlaying)
+                    {
+                        DestroyImmediate(obj);
+                        continue;
+                    }
+#endif
+                    Destroy(obj);
+                }
+            }
+        }
+
         public void GenerateMap(int seed)
         {
             if (seed <= 0) return;
 
+            PurgeLegacyDummies();
             ClearMap();
             EnsureContainer();
 
@@ -356,6 +374,27 @@ namespace HunterVsHider.Map
             if (distFromSouth < 6.0f) return true;
 
             return false;
+        }
+
+        /// <summary>
+        /// Calculates a safe spawn coordinate for Police inside the procedurally generated maze.
+        /// Guaranteed to be in a cleared corridor / safety zone slightly above the floor (Y = 1.0f).
+        /// </summary>
+        public static Vector3 GetSafePoliceSpawnPosition(int index, int mapSize = 50)
+        {
+            float southZ = -Mathf.Min(18f, (mapSize * 0.5f) - 6f);
+            float offsetX = (index % 4) * 2.5f - 3.75f;
+            float offsetZ = (index / 4) * 2.5f;
+            return new Vector3(offsetX, 1.0f, southZ + offsetZ);
+        }
+
+        /// <summary>
+        /// Calculates a safe spawn coordinate for the Assassin inside the procedurally generated maze.
+        /// </summary>
+        public static Vector3 GetSafeAssassinSpawnPosition(int mapSize = 50)
+        {
+            float northZ = Mathf.Min(18f, (mapSize * 0.5f) - 6f);
+            return new Vector3(0f, 1.0f, northZ);
         }
     }
 }

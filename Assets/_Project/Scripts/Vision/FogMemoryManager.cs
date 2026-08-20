@@ -11,6 +11,10 @@ namespace HunterVsHider.Vision
         [Tooltip("The output RenderTexture consumed by the world / post-process shader.")]
         public RenderTexture fovMaskRT;
 
+        [Header("Texture Resolution & Filtering")]
+        [Tooltip("Resolution of the Fog of War mask textures (e.g. 2048).")]
+        public int textureResolution = 2048;
+
         [Header("Memory Configuration")]
         public Material decayMaterial;
 
@@ -42,8 +46,8 @@ namespace HunterVsHider.Vision
         {
             if (isInitialized) return;
 
-            int width = fovMaskRT != null ? fovMaskRT.width : 1024;
-            int height = fovMaskRT != null ? fovMaskRT.height : 1024;
+            int width = fovMaskRT != null ? Mathf.Max(fovMaskRT.width, textureResolution) : textureResolution;
+            int height = fovMaskRT != null ? Mathf.Max(fovMaskRT.height, textureResolution) : textureResolution;
 
             // 1. Raw visibility render texture rendered directly by VisionCamera
             rawVisRT = new RenderTexture(width, height, 0, RenderTextureFormat.ARGB32)

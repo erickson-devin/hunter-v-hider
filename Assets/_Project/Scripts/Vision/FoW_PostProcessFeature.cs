@@ -11,9 +11,19 @@ namespace HunterVsHider.Vision
         public Shader fowShader;
         public RenderTexture fovMaskRT;
 
-        [Header("Arena Mapping Bounds")]
-        public Vector2 mapBoundsMin = new Vector2(-125f, -125f);
-        public Vector2 mapBoundsSize = new Vector2(250f, 250f);
+        [Header("Fog of War World Bounds")]
+        [Tooltip("World center point of the Fog of War volume (X: 0, Y: 0, Z: 0).")]
+        public Vector3 worldCenter = Vector3.zero;
+
+        [Tooltip("Physical world dimensions in meters (X: 300, Z: 300).")]
+        public Vector2 worldSize = new Vector2(300f, 300f);
+
+        [Tooltip("Resolution of the Fog of War mask texture (1024 or 2048).")]
+        public int textureSize = 2048;
+
+        [Header("Arena Mapping Bounds (Calculated)")]
+        public Vector2 mapBoundsMin = new Vector2(-150f, -150f);
+        public Vector2 mapBoundsSize = new Vector2(300f, 300f);
 
         [Header("Appearance")]
         [Range(0.1f, 1.0f)]
@@ -23,9 +33,16 @@ namespace HunterVsHider.Vision
         private Camera mainCamera;
         private Material fowMaterial;
 
+        private void OnValidate()
+        {
+            mapBoundsMin = new Vector2(worldCenter.x - (worldSize.x * 0.5f), worldCenter.z - (worldSize.y * 0.5f));
+            mapBoundsSize = worldSize;
+        }
+
         private void Awake()
         {
             mainCamera = GetComponent<Camera>();
+            OnValidate();
             EnsureResources();
         }
 
@@ -121,6 +138,7 @@ namespace HunterVsHider.Vision
             frustumCorners.SetRow(2, bottomRight);
             frustumCorners.SetRow(3, bottomLeft);
 
+            OnValidate();
             fowMaterial.SetMatrix("_FrustumCornersWS", frustumCorners);
             fowMaterial.SetVector("_CameraWS", mainCamera.transform.position);
             fowMaterial.SetVector("_MapBounds", new Vector4(mapBoundsMin.x, mapBoundsMin.y, mapBoundsSize.x, mapBoundsSize.y));

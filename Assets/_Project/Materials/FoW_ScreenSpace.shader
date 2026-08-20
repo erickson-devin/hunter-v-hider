@@ -29,10 +29,11 @@ Shader "HunterVsHider/FoW_ScreenSpace"
             float4 _MainTex_TexelSize;
             sampler2D _CameraDepthTexture;
             sampler2D _FoVMaskTex;
+            float4 _FoVMaskTex_TexelSize;
 
             float4x4 _FrustumCornersWS;
             float3 _CameraWS;
-            float4 _MapBounds; // (minX, minZ, sizeX, sizeZ) e.g. (-25, -25, 50, 50)
+            float4 _MapBounds; // (minX, minZ, sizeX, sizeZ) e.g. (-150, -150, 300, 300)
             fixed4 _FogColor;
             float _MemoryDarkness;
 
@@ -79,37 +80,37 @@ Shader "HunterVsHider/FoW_ScreenSpace"
                 // Reconstruct world position from camera position, frustum ray, and depth
                 float3 worldPos = _CameraWS + i.interpolatedRay * linearDepth;
 
-                // Map world position X and Z to FoVMask UV space (e.g. 250m x 250m combat arena)
+                // Map world position X and Z to FoVMask UV space (300m x 300m combat arena)
                 float2 fovUV = (worldPos.xz - _MapBounds.xy) / _MapBounds.zw;
 
-                // Out of arena bounds -> Render standard scene lighting (Zone_Lobby and Zone_PolicePrep remain clear of fog)
+                // Staging zones (Zone_Lobby at X=1000, Zone_PolicePrep at X=2000) remain clear of combat fog
+                if (worldPos.x > 500.0)
+                {
+                    return sceneColor;
+                }
+
+                // Within Combat Arena region: outside 300x300 boundary renders solid pitch-black fog
                 if (fovUV.x < 0.0 || fovUV.x > 1.0 || fovUV.y < 0.0 || fovUV.y > 1.0)
                 {
-                    return sceneColor;
+                    return _FogColor;
                 }
 
-                fixed mask = tex2D(_FoVMaskTex, fovUV).r;
+                // Multi-tap soft edge filter with bilinear kernel for smooth feathering
+                float2 texel = _FoVMaskTex_TexelSize.xy * 1.5;
+                fixed m0 = tex2D(_FoVMaskTex, fovUV).r;
+                fixed m1 = tex2D(_FoVMaskTex, fovUV + float2(texel.x, texel.y)).r;
+                fixed m2 = tex2D(_FoVMaskTex, fovUV + float2(-texel.x, texel.y)).r;
+                fixed m3 = tex2D(_FoVMaskTex, fovUV + float2(texel.x, -texel.y)).r;
+                fixed m4 = tex2D(_FoVMaskTex, fovUV + float2(-texel.x, -texel.y)).r;
+                fixed mask = (m0 * 0.4) + ((m1 + m2 + m3 + m4) * 0.15);
 
-                // 3-Tier Evaluation:
-                // 1. Mask >= 0.95 -> Visible active wedge: Output original scene color
-                // 2. 0.35 <= Mask < 0.95 -> Explored memory: Output scene color darkened by 50%
-                // 3. Mask < 0.35 -> Unexplored: Output opaque black fog
-                if (mask >= 0.95)
-                {
-                    return sceneColor;
-                }
-                else if (mask >= 0.35)
-                {
-                    float t = (mask - 0.35) / (0.95 - 0.35);
-                    fixed4 memoryColor = sceneColor * _MemoryDarkness;
-                    return lerp(memoryColor, sceneColor, t);
-                }
-                else
-                {
-                    float t = saturate(mask / 0.35);
-                    fixed4 memoryColor = sceneColor * _MemoryDarkness;
-                    return lerp(_FogColor, memoryColor, t);
-                }
+                // Smooth feathered 3-tier transitions without blocky stair-stepping
+                fixed4 memoryColor = sceneColor * _MemoryDarkness;
+                float activeBlend = smoothstep(0.48, 0.88, mask);
+                float memoryBlend = smoothstep(0.04, 0.38, mask);
+
+                fixed4 baseFogAndMem = lerp(_FogColor, memoryColor, memoryBlend);
+                return lerp(baseFogAndMem, sceneColor, activeBlend);
             }
             ENDCG
         }

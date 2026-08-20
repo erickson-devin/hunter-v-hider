@@ -27,7 +27,7 @@ namespace HunterVsHider.Vision
 
         [Tooltip("Total ray count cast around the 360-degree perimeter.")]
         [Range(60, 360)]
-        public int rayCount = 180;
+        public int rayCount = 240;
 
         [Header("Obstacle Layer")]
         public LayerMask obstacleMask = 1 << 7; // Layer 7: Obstacle
@@ -95,14 +95,14 @@ namespace HunterVsHider.Vision
                 viewAngle = 90f;
                 viewRadius = 15f;
                 proximityRadius = 2.5f;
-                rayCount = 180;
+                rayCount = 240;
             }
             else if (role == Player.PlayerRole.Assassin)
             {
                 viewAngle = 360f;
                 viewRadius = 12f;
                 proximityRadius = 12f;
-                rayCount = 180;
+                rayCount = 240;
             }
         }
 
@@ -112,6 +112,8 @@ namespace HunterVsHider.Vision
             {
                 return;
             }
+
+            DynamicFog.Instance?.UpdatePlayerTracking(transform);
 
             GenerateDynamicFOVMesh();
         }
@@ -130,7 +132,9 @@ namespace HunterVsHider.Vision
                 fovMesh.Clear();
             }
 
-            Vector3 rayOrigin = transform.position + Vector3.up * 0.5f; // Eye/torso height
+            // Flatten target position to physical floor plane (Y = 0) to eliminate 60-degree camera parallax offset
+            Vector3 flattenedPos = new Vector3(transform.position.x, 0f, transform.position.z);
+            Vector3 rayOrigin = flattenedPos + Vector3.up * 0.5f; // Eye/torso height at 0.5m above ground
             int numRays = rayCount;
             int numVertices = numRays + 2;
 

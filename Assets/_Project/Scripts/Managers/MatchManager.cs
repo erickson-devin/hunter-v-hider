@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Unity.Netcode;
 using UnityEngine;
 using HunterVsHider.Player;
+using HunterVsHider.Map;
 
 namespace HunterVsHider.Managers
 {
@@ -142,12 +143,45 @@ namespace HunterVsHider.Managers
                 return;
             }
 
+            PurgeLegacyPrototypeDummies();
             FindZoneReferencesIfNull();
         }
 
         private void Start()
         {
+            PurgeLegacyPrototypeDummies();
             FindZoneReferencesIfNull();
+        }
+
+        /// <summary>
+        /// Runtime scene sanitation: finds and destroys any legacy prototype dummies or test objects.
+        /// </summary>
+        public void PurgeLegacyPrototypeDummies()
+        {
+            var allObjs = FindObjectsByType<GameObject>(FindObjectsInactive.Include);
+            int purgedCount = 0;
+            foreach (var obj in allObjs)
+            {
+                if (obj == null) continue;
+                string objName = obj.name.ToLower();
+                if (objName.Contains("dummy") || objName.Contains("targetdummy") || objName.Contains("testdummy") || obj.CompareTag("Enemy"))
+                {
+#if UNITY_EDITOR
+                    if (!Application.isPlaying)
+                    {
+                        DestroyImmediate(obj);
+                        purgedCount++;
+                        continue;
+                    }
+#endif
+                    Destroy(obj);
+                    purgedCount++;
+                }
+            }
+            if (purgedCount > 0)
+            {
+                Debug.Log($"[MatchManager] Runtime scene sanitation purged {purgedCount} prototype dummy objects.");
+            }
         }
 
         public override void OnNetworkSpawn()
@@ -227,6 +261,52 @@ namespace HunterVsHider.Managers
         }
 
         /// <summary>
+        /// Server-authoritative method to transition from PrepPhase to CombatPhase.
+        /// Can be called on timer expiration or manual host trigger.
+        /// </summary>
+        public void TransitionToCombatPhase()
+        {
+            if (!IsServer)
+            {
+                Debug.LogWarning("[MatchManager] TransitionToCombatPhase called on non-server client! Forwarding via RPC.");
+                RequestStartCombatPhase();
+                return;
+            }
+
+            if (currentMatchState.Value != MatchState.PrepPhase)
+            {
+                Debug.LogWarning($"[MatchManager] Cannot transition to CombatPhase when current state is {currentMatchState.Value}!");
+                return;
+            }
+
+            Debug.Log("[MatchManager] Server transitioning to CombatPhase...");
+            SetMatchState(MatchState.CombatPhase);
+        }
+
+        public void CmdStartCombatPhase() => TransitionToCombatPhase();
+
+        /// <summary>
+        /// Requests combat phase transition from either Host or Client.
+        /// </summary>
+        public void RequestStartCombatPhase()
+        {
+            if (IsServer)
+            {
+                TransitionToCombatPhase();
+            }
+            else
+            {
+                RequestStartCombatPhaseServerRpc();
+            }
+        }
+
+        [Rpc(SendTo.Server)]
+        private void RequestStartCombatPhaseServerRpc()
+        {
+            TransitionToCombatPhase();
+        }
+
+        /// <summary>
         /// Server-only state controller that handles phase entry logic and transitions.
         /// </summary>
         /// <param name="newState">Target match state.</param>
@@ -253,6 +333,7 @@ namespace HunterVsHider.Managers
                     break;
 
                 case MatchState.CombatPhase:
+                    ExecuteCombatPhaseTeleportation();
                     Debug.Log("[MatchManager] Entered CombatPhase.");
                     break;
 
@@ -325,6 +406,7 @@ namespace HunterVsHider.Managers
         {
             if (!IsServer) return;
 
+            PurgeLegacyPrototypeDummies();
             FindZoneReferencesIfNull();
 
             Vector3 lobbyPos = zoneLobby != null ? zoneLobby.position : new Vector3(1000f, 0f, 0f);
@@ -371,6 +453,47 @@ namespace HunterVsHider.Managers
             }
         }
 
+        /// <summary>
+        /// Teleports Police players from Zone_PolicePrep into the generated combat arena corridors (South spawn),
+        /// and ensures the Assassin avatar is positioned in the arena (North spawn).
+        /// </summary>
+        private void ExecuteCombatPhaseTeleportation()
+        {
+            if (!IsServer) return;
+
+            PurgeLegacyPrototypeDummies();
+            FindZoneReferencesIfNull();
+
+            int mapSize = selectedMapSize.Value > 0 ? selectedMapSize.Value : 50;
+            int policeCount = 0;
+
+            if (NetworkManager.Singleton != null)
+            {
+                foreach (var clientPair in NetworkManager.Singleton.ConnectedClients)
+                {
+                    var playerObj = clientPair.Value.PlayerObject;
+                    if (playerObj == null) continue;
+
+                    var playerState = playerObj.GetComponent<PlayerNetworkState>();
+                    if (playerState == null) continue;
+
+                    if (playerState.Role == PlayerRole.Police)
+                    {
+                        Vector3 targetSpawn = MapGenerator.GetSafePoliceSpawnPosition(policeCount, mapSize);
+                        playerState.ServerTeleport(targetSpawn, Quaternion.identity);
+                        Debug.Log($"[MatchManager] Teleported Police ClientId {playerState.OwnerClientId} to Combat Arena ({targetSpawn})");
+                        policeCount++;
+                    }
+                    else if (playerState.Role == PlayerRole.Assassin)
+                    {
+                        Vector3 targetSpawn = MapGenerator.GetSafeAssassinSpawnPosition(mapSize);
+                        playerState.ServerTeleport(targetSpawn, Quaternion.Euler(0f, 180f, 0f));
+                        Debug.Log($"[MatchManager] Teleported Assassin ClientId {playerState.OwnerClientId} to Combat Arena ({targetSpawn})");
+                    }
+                }
+            }
+        }
+
         private void HandleMatchStateChanged(MatchState previousState, MatchState newState)
         {
             Debug.Log($"[MatchManager] MatchState changed from {previousState} to {newState} (IsServer: {IsServer}, IsClient: {IsClient})");
@@ -380,6 +503,10 @@ namespace HunterVsHider.Managers
             if (newState == MatchState.PrepPhase)
             {
                 ExecuteLocalClientPrepPhaseResponse();
+            }
+            else if (newState == MatchState.CombatPhase)
+            {
+                ExecuteLocalClientCombatPhaseResponse();
             }
 
             OnMatchStateChanged?.Invoke(previousState, newState);
@@ -448,12 +575,57 @@ namespace HunterVsHider.Managers
             Debug.Log($"[MatchManager] Local Client {playerState.OwnerClientId} ({playerState.Role}) executed PrepPhase teleport to {targetSpawn}");
         }
 
+        /// <summary>
+        /// Executes client-side / local player response when entering CombatPhase.
+        /// Spawns the character in the maze, re-enables full vision and Fog of War, snaps camera back, and enables movement.
+        /// </summary>
+        public void ExecuteLocalClientCombatPhaseResponse()
+        {
+            FindZoneReferencesIfNull();
+
+            if (NetworkManager.Singleton == null || NetworkManager.Singleton.LocalClient == null) return;
+            var localPlayerObj = NetworkManager.Singleton.LocalClient.PlayerObject;
+            if (localPlayerObj == null) return;
+
+            var playerState = localPlayerObj.GetComponent<PlayerNetworkState>();
+            if (playerState == null) return;
+
+            int mapSize = selectedMapSize.Value > 0 ? selectedMapSize.Value : 50;
+
+            Vector3 targetSpawn;
+            Quaternion targetRot;
+
+            if (playerState.Role == PlayerRole.Police)
+            {
+                targetSpawn = MapGenerator.GetSafePoliceSpawnPosition(0, mapSize);
+                targetRot = Quaternion.identity;
+            }
+            else if (playerState.Role == PlayerRole.Assassin)
+            {
+                targetSpawn = MapGenerator.GetSafeAssassinSpawnPosition(mapSize);
+                targetRot = Quaternion.Euler(0f, 180f, 0f);
+            }
+            else
+            {
+                targetSpawn = new Vector3(0f, 1f, 0f);
+                targetRot = Quaternion.identity;
+            }
+
+            playerState.ApplyTeleport(targetSpawn, targetRot);
+
+            // Re-apply role vision and snap camera back
+            playerState.ApplyRoleVision();
+            playerState.UpdatePrepPhaseCameraAndMovement(MatchState.CombatPhase);
+
+            Debug.Log($"[MatchManager] Local Client {playerState.OwnerClientId} ({playerState.Role}) transitioned to CombatPhase at {targetSpawn}");
+        }
+
         private void OnGUI()
         {
             if (!showMatchHUD) return;
             if (NetworkManager.Singleton == null || (!NetworkManager.Singleton.IsClient && !NetworkManager.Singleton.IsServer)) return;
 
-            GUILayout.BeginArea(new Rect(hudOffsetX, hudOffsetY, 260, 140), GUI.skin.box);
+            GUILayout.BeginArea(new Rect(hudOffsetX, hudOffsetY, 260, 160), GUI.skin.box);
 
             GUILayout.Label("<b>== MATCH CONTROLLER ==</b>");
             GUILayout.Label($"<b>State:</b> <color=yellow>{currentMatchState.Value}</color>");
