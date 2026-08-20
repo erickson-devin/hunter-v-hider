@@ -36,36 +36,63 @@ namespace HunterVsHider.Managers
             }
         }
 
+        private string relayJoinCodeInput = "";
+
         private void OnGUI()
         {
             if (!showGUI) return;
 
             if (NetworkManager.Singleton == null)
             {
-                GUILayout.BeginArea(new Rect(guiOffsetX, guiOffsetY, 220, 100), GUI.skin.box);
+                GUILayout.BeginArea(new Rect(guiOffsetX, guiOffsetY, 240, 100), GUI.skin.box);
                 GUILayout.Label("NetworkManager not found!");
                 GUILayout.EndArea();
                 return;
             }
 
-            GUILayout.BeginArea(new Rect(guiOffsetX, guiOffsetY, 260, 320), GUI.skin.box);
+            GUILayout.BeginArea(new Rect(guiOffsetX, guiOffsetY, 280, 420), GUI.skin.box);
 
             if (!NetworkManager.Singleton.IsClient && !NetworkManager.Singleton.IsServer)
             {
                 GUILayout.Label("<b>== Hunter v Hider NGO ==</b>");
                 GUILayout.Space(5);
 
-                if (GUILayout.Button("Start Host (Server + Client)", GUILayout.Height(30)))
+                if (GUILayout.Button("Start Host (LAN)", GUILayout.Height(26)))
                 {
                     NetworkManager.Singleton.StartHost();
                 }
 
-                if (GUILayout.Button("Start Client", GUILayout.Height(30)))
+                if (GUILayout.Button("Start Client (LAN)", GUILayout.Height(26)))
                 {
                     NetworkManager.Singleton.StartClient();
                 }
 
-                if (GUILayout.Button("Start Server (Dedicated)", GUILayout.Height(25)))
+                GUILayout.Space(6);
+                GUILayout.Label("<b>-- Relay Matchmaking --</b>");
+
+                if (GUILayout.Button("Host Game (Relay)", GUILayout.Height(30)))
+                {
+                    if (RelayManager.Instance != null)
+                    {
+                        _ = RelayManager.Instance.CreateRelayHost();
+                    }
+                }
+
+                GUILayout.BeginHorizontal();
+                GUILayout.Label("Code:", GUILayout.Width(45));
+                relayJoinCodeInput = GUILayout.TextField(relayJoinCodeInput, 10, GUILayout.Height(24));
+                GUILayout.EndHorizontal();
+
+                if (GUILayout.Button("Join Game (Relay)", GUILayout.Height(30)))
+                {
+                    if (RelayManager.Instance != null && !string.IsNullOrWhiteSpace(relayJoinCodeInput))
+                    {
+                        _ = RelayManager.Instance.JoinRelayClient(relayJoinCodeInput);
+                    }
+                }
+
+                GUILayout.Space(6);
+                if (GUILayout.Button("Start Server (Dedicated LAN)", GUILayout.Height(24)))
                 {
                     NetworkManager.Singleton.StartServer();
                 }

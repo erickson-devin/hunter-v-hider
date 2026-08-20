@@ -48,7 +48,7 @@ public class SetupTaskPoliceLoadoutUI
         }
 
         // 3. Ensure EventSystem exists
-        EventSystem eventSystem = Object.FindFirstObjectByType<EventSystem>();
+        EventSystem eventSystem = Object.FindAnyObjectByType<EventSystem>();
         if (eventSystem == null)
         {
             GameObject esObj = new GameObject("EventSystem");
