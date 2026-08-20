@@ -79,13 +79,13 @@ Shader "HunterVsHider/FoW_ScreenSpace"
                 // Reconstruct world position from camera position, frustum ray, and depth
                 float3 worldPos = _CameraWS + i.interpolatedRay * linearDepth;
 
-                // Map world position X and Z to FoVMask UV space (50m x 50m arena)
+                // Map world position X and Z to FoVMask UV space (e.g. 250m x 250m combat arena)
                 float2 fovUV = (worldPos.xz - _MapBounds.xy) / _MapBounds.zw;
 
-                // Out of arena bounds -> Unexplored opaque black
+                // Out of arena bounds -> Render standard scene lighting (Zone_Lobby and Zone_PolicePrep remain clear of fog)
                 if (fovUV.x < 0.0 || fovUV.x > 1.0 || fovUV.y < 0.0 || fovUV.y > 1.0)
                 {
-                    return _FogColor;
+                    return sceneColor;
                 }
 
                 fixed mask = tex2D(_FoVMaskTex, fovUV).r;

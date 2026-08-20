@@ -8,17 +8,12 @@ namespace HunterVsHider.Managers
     {
         public static PlayerSpawnManager Instance { get; private set; }
 
-        [Header("Default Spawn Positions")]
-        [Tooltip("Safe spawn locations away from walls and central obstacles.")]
-        [SerializeField]
-        private Vector3[] defaultSpawnPoints = new Vector3[]
-        {
-            new Vector3(-4f, 1f, -18f), // South / Spawn 0 (Host / Police)
-            new Vector3(4f, 1f, -18f),  // South / Spawn 1 (Client 1)
-            new Vector3(0f, 1f, 18f),   // North / Spawn 2 (Assassin)
-            new Vector3(-6f, 1f, 18f),  // North / Spawn 3
-            new Vector3(6f, 1f, 18f)    // North / Spawn 4
-        };
+        [Header("Zone Spawning")]
+        [Tooltip("Transform representing Zone_Lobby.")]
+        public Transform zoneLobby;
+
+        [Tooltip("Fallback lobby spawn position if Zone_Lobby Transform is unassigned.")]
+        public Vector3 fallbackLobbyPosition = new Vector3(1000f, 0f, 0f);
 
         private readonly HashSet<ulong> spawnedClients = new HashSet<ulong>();
 
@@ -36,6 +31,8 @@ namespace HunterVsHider.Managers
 
         private void Start()
         {
+            FindLobbyZoneIfNull();
+
             if (NetworkManager.Singleton != null)
             {
                 NetworkManager.Singleton.OnClientConnectedCallback += HandleClientConnected;
@@ -47,6 +44,15 @@ namespace HunterVsHider.Managers
             if (NetworkManager.Singleton != null)
             {
                 NetworkManager.Singleton.OnClientConnectedCallback -= HandleClientConnected;
+            }
+        }
+
+        private void FindLobbyZoneIfNull()
+        {
+            if (zoneLobby == null)
+            {
+                var obj = GameObject.Find("Zone_Lobby");
+                if (obj != null) zoneLobby = obj.transform;
             }
         }
 
@@ -68,26 +74,37 @@ namespace HunterVsHider.Managers
             if (NetworkManager.Singleton.ConnectedClients.TryGetValue(clientId, out var client) &&
                 client.PlayerObject != null)
             {
-                Vector3 spawnPos = GetSpawnPositionForClient(clientId);
-                client.PlayerObject.transform.position = spawnPos;
-
-                // If player has a Rigidbody, update its position cleanly
-                var rb = client.PlayerObject.GetComponent<Rigidbody>();
-                if (rb != null)
+                Vector3 spawnPos = GetLobbySpawnPosition(clientId);
+                
+                var playerState = client.PlayerObject.GetComponent<Player.PlayerNetworkState>();
+                if (playerState != null)
                 {
-                    rb.position = spawnPos;
-                    rb.linearVelocity = Vector3.zero;
-                    rb.angularVelocity = Vector3.zero;
+                    playerState.ServerTeleport(spawnPos, Quaternion.identity);
+                }
+                else
+                {
+                    client.PlayerObject.transform.position = spawnPos;
+                    var rb = client.PlayerObject.GetComponent<Rigidbody>();
+                    if (rb != null)
+                    {
+                        rb.position = spawnPos;
+                        rb.linearVelocity = Vector3.zero;
+                        rb.angularVelocity = Vector3.zero;
+                    }
                 }
 
-                Debug.Log($"[PlayerSpawnManager] Positioned player ClientId {clientId} at safe spawn: {spawnPos}");
+                Debug.Log($"[PlayerSpawnManager] Positioned player ClientId {clientId} at Zone_Lobby: {spawnPos}");
             }
         }
 
-        public Vector3 GetSpawnPositionForClient(ulong clientId)
+        public Vector3 GetLobbySpawnPosition(ulong clientId)
         {
-            int index = (int)(clientId % (ulong)defaultSpawnPoints.Length);
-            return defaultSpawnPoints[index];
+            FindLobbyZoneIfNull();
+            Vector3 lobbyBase = zoneLobby != null ? zoneLobby.position : fallbackLobbyPosition;
+            
+            float offsetX = (clientId % 4) * 2.5f - 3.75f;
+            float offsetZ = (clientId / 4) * 2.5f;
+            return lobbyBase + new Vector3(offsetX, 1f, offsetZ);
         }
     }
 }

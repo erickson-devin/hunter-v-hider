@@ -12,8 +12,8 @@ namespace HunterVsHider.Vision
         public RenderTexture fovMaskRT;
 
         [Header("Arena Mapping Bounds")]
-        public Vector2 mapBoundsMin = new Vector2(-25f, -25f);
-        public Vector2 mapBoundsSize = new Vector2(50f, 50f);
+        public Vector2 mapBoundsMin = new Vector2(-125f, -125f);
+        public Vector2 mapBoundsSize = new Vector2(250f, 250f);
 
         [Header("Appearance")]
         [Range(0.1f, 1.0f)]

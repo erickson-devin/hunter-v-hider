@@ -166,5 +166,62 @@ namespace HunterVsHider.Player
             currentRole.Value = newRole;
             Debug.Log($"[PlayerNetworkState] Server assigned role '{newRole}' to ClientId {OwnerClientId}");
         }
+
+        /// <summary>
+        /// Server-authoritative teleportation method. Dispatches ClientRpc to client owner for immediate position synchronization.
+        /// </summary>
+        /// <param name="targetPosition">World destination position.</param>
+        /// <param name="targetRotation">World destination rotation.</param>
+        public void ServerTeleport(Vector3 targetPosition, Quaternion targetRotation)
+        {
+            if (!IsServer)
+            {
+                Debug.LogWarning($"[PlayerNetworkState] Non-server client {NetworkManager.Singleton?.LocalClientId} attempted to teleport ClientId {OwnerClientId}!");
+                return;
+            }
+
+            // If server owns this player (Host), apply immediately
+            if (IsOwner)
+            {
+                ApplyTeleport(targetPosition, targetRotation);
+            }
+
+            // Dispatch RPC to owner client (and remote observers)
+            TeleportClientRpc(targetPosition, targetRotation);
+            Debug.Log($"[PlayerNetworkState] Server initiated teleport for ClientId {OwnerClientId} to {targetPosition}");
+        }
+
+        [ClientRpc]
+        private void TeleportClientRpc(Vector3 targetPosition, Quaternion targetRotation)
+        {
+            // Owner client applies teleport to its authoritative transform and physics
+            if (IsOwner)
+            {
+                ApplyTeleport(targetPosition, targetRotation);
+            }
+        }
+
+        private void ApplyTeleport(Vector3 targetPosition, Quaternion targetRotation)
+        {
+            transform.position = targetPosition;
+            transform.rotation = targetRotation;
+
+            var rb = GetComponent<Rigidbody>();
+            if (rb != null)
+            {
+                rb.position = targetPosition;
+                rb.rotation = targetRotation;
+                rb.linearVelocity = Vector3.zero;
+                rb.angularVelocity = Vector3.zero;
+            }
+
+            var netTransform = GetComponent<Unity.Netcode.Components.NetworkTransform>();
+            if (netTransform != null)
+            {
+                netTransform.Teleport(targetPosition, targetRotation, transform.localScale);
+            }
+
+            Debug.Log($"[PlayerNetworkState] ClientId {OwnerClientId} successfully teleported to {targetPosition}");
+        }
     }
 }
