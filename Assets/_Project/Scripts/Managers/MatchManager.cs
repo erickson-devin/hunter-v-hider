@@ -43,7 +43,7 @@ namespace HunterVsHider.Managers
         public MatchState CurrentState => currentMatchState.Value;
 
         [Header("Map Size Configuration")]
-        [Tooltip("Networked arena map boundary size (50, 100, or 250). Read: Everyone, Write: Server.")]
+        [Tooltip("Networked arena map boundary size (50, 100, or 150). Read: Everyone, Write: Server.")]
         public NetworkVariable<int> selectedMapSize = new NetworkVariable<int>(
             50,
             NetworkVariableReadPermission.Everyone,
@@ -67,7 +67,7 @@ namespace HunterVsHider.Managers
         /// <summary>
         /// Server-only method to update the selected map size boundary.
         /// </summary>
-        /// <param name="newSize">Target map size (e.g. 50, 100, 250)</param>
+        /// <param name="newSize">Target map size (e.g. 50, 100, 150)</param>
         public void CmdSetMapSize(int newSize)
         {
             if (!IsServer)

@@ -179,7 +179,7 @@ namespace HunterVsHider.Managers
             if (dropdownMapSize != null)
             {
                 dropdownMapSize.ClearOptions();
-                dropdownMapSize.AddOptions(new System.Collections.Generic.List<string> { "50", "100", "250" });
+                dropdownMapSize.AddOptions(new System.Collections.Generic.List<string> { "50", "100", "150" });
                 dropdownMapSize.onValueChanged.RemoveAllListeners();
                 dropdownMapSize.onValueChanged.AddListener(OnMapSizeDropdownChanged);
                 if (MatchManager.Singleton != null)
@@ -358,6 +358,14 @@ namespace HunterVsHider.Managers
             SetMainMenuInteractable(true);
         }
 
+        public void ShowMainMenuPanel() => ShowMainMenu();
+
+        public void ShowWaitingRoomPanel()
+        {
+            if (mainMenuPanel != null) mainMenuPanel.SetActive(false);
+            if (waitingRoomPanel != null) waitingRoomPanel.SetActive(true);
+        }
+
         public void ShowWaitingRoom(string joinCode)
         {
             if (mainMenuPanel != null) mainMenuPanel.SetActive(false);
@@ -381,14 +389,14 @@ namespace HunterVsHider.Managers
         {
             if (dropdownMapSize == null || index < 0 || index >= dropdownMapSize.options.Count) return;
 
-            string selectedText = dropdownMapSize.options[index].text.Trim().Replace("x50", "").Replace("x100", "").Replace("x250", "");
+            string selectedText = dropdownMapSize.options[index].text.Trim().Replace("x50", "").Replace("x100", "").Replace("x150", "").Replace("x250", "");
             if (!int.TryParse(selectedText, out int size))
             {
                 switch (index)
                 {
                     case 0: size = 50; break;
                     case 1: size = 100; break;
-                    case 2: size = 250; break;
+                    case 2: size = 150; break;
                     default: size = 50; break;
                 }
             }
@@ -403,7 +411,7 @@ namespace HunterVsHider.Managers
         private int GetDropdownIndexForSize(int size)
         {
             if (size == 100) return 1;
-            if (size == 250) return 2;
+            if (size == 150 || size == 250) return 2;
             return 0; // default 50
         }
 
