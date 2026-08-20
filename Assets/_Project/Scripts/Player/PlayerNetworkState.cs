@@ -21,14 +21,23 @@ namespace HunterVsHider.Player
             NetworkVariableWritePermission.Server
         );
 
+        [Header("Weapon State")]
+        [Tooltip("Networked selected weapon profile ID (0 = Tactical Rifle, 1 = Optic-Ready 9mm, 2 = Sub-Compact .45). Read: Everyone, Write: Owner.")]
+        public NetworkVariable<int> selectedWeaponID = new NetworkVariable<int>(
+            0,
+            NetworkVariableReadPermission.Everyone,
+            NetworkVariableWritePermission.Owner
+        );
+
         public PlayerRole Role => currentRole.Value;
+        public int SelectedWeaponID => selectedWeaponID.Value;
 
         public override void OnNetworkSpawn()
         {
             base.OnNetworkSpawn();
 
             // Print synchronization details
-            Debug.Log($"[PlayerNetworkState] OnNetworkSpawn -> ClientId: {OwnerClientId}, IsLocalPlayer: {IsLocalPlayer}, IsServer: {IsServer}, Role: {currentRole.Value}");
+            Debug.Log($"[PlayerNetworkState] OnNetworkSpawn -> ClientId: {OwnerClientId}, IsLocalPlayer: {IsLocalPlayer}, IsServer: {IsServer}, Role: {currentRole.Value}, WeaponID: {selectedWeaponID.Value}");
 
             // Configure local camera follow
             if (IsLocalPlayer)
@@ -62,20 +71,26 @@ namespace HunterVsHider.Player
                 {
                     fovVisuals.gameObject.SetActive(false);
                 }
-                return;
+            }
+            else
+            {
+                // Apply role-specific visibility on spawn for the local player
+                ApplyRoleVision();
             }
 
-            // Subscribe to role changes across the network
+            // Subscribe to state changes across the network (for both Owner and Observers)
             currentRole.OnValueChanged += OnRoleChanged;
+            selectedWeaponID.OnValueChanged += OnWeaponChanged;
 
-            // Apply role-specific visibility on spawn for the local player
-            ApplyRoleVision();
+            // Initialize weapon visual
+            UpdateWeaponVisual(selectedWeaponID.Value);
         }
 
         public override void OnNetworkDespawn()
         {
             base.OnNetworkDespawn();
             currentRole.OnValueChanged -= OnRoleChanged;
+            selectedWeaponID.OnValueChanged -= OnWeaponChanged;
         }
 
         private void OnRoleChanged(PlayerRole previousRole, PlayerRole newRole)
@@ -83,7 +98,124 @@ namespace HunterVsHider.Player
             Debug.Log($"[PlayerNetworkState] OwnerClientId {OwnerClientId} Role changed from {previousRole} to {newRole} (IsLocalPlayer: {IsLocalPlayer}, IsServer: {IsServer})");
             
             // Re-apply vision settings when role updates
-            ApplyRoleVision();
+            if (IsOwner)
+            {
+                ApplyRoleVision();
+            }
+        }
+
+        private void OnWeaponChanged(int previousWeapon, int newWeapon)
+        {
+            Debug.Log($"[PlayerNetworkState] OwnerClientId {OwnerClientId} Weapon changed from {previousWeapon} to {newWeapon}");
+            UpdateWeaponVisual(newWeapon);
+        }
+
+        /// <summary>
+        /// Owner-authoritative method to select a weapon profile.
+        /// </summary>
+        /// <param name="weaponID">0: Tactical Rifle, 1: Optic-Ready 9mm, 2: Sub-Compact .45</param>
+        public void CmdSelectWeapon(int weaponID)
+        {
+            if (!IsOwner)
+            {
+                Debug.LogWarning($"[PlayerNetworkState] Non-owner ClientId {NetworkManager.Singleton?.LocalClientId} attempted to select weapon on ClientId {OwnerClientId}!");
+                return;
+            }
+
+            selectedWeaponID.Value = weaponID;
+            Debug.Log($"[PlayerNetworkState] ClientId {OwnerClientId} CmdSelectWeapon -> ID: {weaponID}");
+        }
+
+        /// <summary>
+        /// Updates the 3D physical weapon model in the player's hands across all clients.
+        /// ID 0 = Tactical Rifle (Blue Long Box)
+        /// ID 1 = Optic-Ready 9mm (Green Short Box)
+        /// ID 2 = Sub-Compact .45 (Red Short Box)
+        /// </summary>
+        public void UpdateWeaponVisual(int weaponID)
+        {
+            Transform weaponHolder = transform.Find("WeaponHolder");
+            if (weaponHolder == null) return;
+
+            // Find or create the visual block
+            Transform visualBlock = weaponHolder.Find("Weapon_VisualBlock");
+            if (visualBlock == null)
+            {
+                GameObject blockObj = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                blockObj.name = "Weapon_VisualBlock";
+                blockObj.transform.SetParent(weaponHolder, false);
+                
+                // Remove physics collider so it doesn't interfere with player movement
+                var col = blockObj.GetComponent<Collider>();
+                if (col != null) Destroy(col);
+
+                visualBlock = blockObj.transform;
+            }
+
+            // Disable legacy static gun meshes if present
+            Transform p = weaponHolder.Find("Gun_Pistol");
+            if (p != null) p.gameObject.SetActive(false);
+            Transform r = weaponHolder.Find("Gun_Rifle");
+            if (r != null) r.gameObject.SetActive(false);
+
+            MeshRenderer renderer = visualBlock.GetComponent<MeshRenderer>();
+            Material mat = null;
+
+            switch (weaponID)
+            {
+                case 0: // Tactical Rifle (Blue Long Box)
+                    visualBlock.localPosition = new Vector3(0.3f, 0.0f, 0.6f);
+                    visualBlock.localScale = new Vector3(0.18f, 0.18f, 1.2f);
+                    mat = GetOrCreateColorMaterial("Mat_Weapon_Blue", new Color(0.15f, 0.45f, 1.0f));
+                    break;
+
+                case 1: // Optic-Ready 9mm (Green Short Box)
+                    visualBlock.localPosition = new Vector3(0.3f, 0.0f, 0.38f);
+                    visualBlock.localScale = new Vector3(0.15f, 0.18f, 0.55f);
+                    mat = GetOrCreateColorMaterial("Mat_Weapon_Green", new Color(0.15f, 0.85f, 0.25f));
+                    break;
+
+                case 2: // Sub-Compact .45 (Red Short Box)
+                    visualBlock.localPosition = new Vector3(0.3f, 0.0f, 0.28f);
+                    visualBlock.localScale = new Vector3(0.13f, 0.13f, 0.32f);
+                    mat = GetOrCreateColorMaterial("Mat_Weapon_Red", new Color(0.95f, 0.2f, 0.2f));
+                    break;
+
+                default:
+                    visualBlock.localPosition = new Vector3(0.3f, 0.0f, 0.5f);
+                    visualBlock.localScale = new Vector3(0.15f, 0.15f, 0.5f);
+                    mat = GetOrCreateColorMaterial("Mat_Weapon_Blue", new Color(0.15f, 0.45f, 1.0f));
+                    break;
+            }
+
+            if (renderer != null && mat != null)
+            {
+                renderer.sharedMaterial = mat;
+            }
+        }
+
+        private Material GetOrCreateColorMaterial(string matName, Color color)
+        {
+            string path = $"Assets/_Project/Materials/{matName}.mat";
+            Material mat = null;
+            #if UNITY_EDITOR
+            mat = UnityEditor.AssetDatabase.LoadAssetAtPath<Material>(path);
+            #endif
+
+            if (mat == null)
+            {
+                Shader standardShader = Shader.Find("Universal Render Pipeline/Lit");
+                if (standardShader == null) standardShader = Shader.Find("Standard");
+                mat = new Material(standardShader);
+                mat.color = color;
+                #if UNITY_EDITOR
+                if (!Application.isPlaying)
+                {
+                    UnityEditor.AssetDatabase.CreateAsset(mat, path);
+                }
+                #endif
+            }
+            return mat;
         }
 
         /// <summary>
