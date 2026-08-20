@@ -64,12 +64,26 @@ namespace HunterVsHider.Vision
         [ImageEffectOpaque]
         private void OnRenderImage(RenderTexture source, RenderTexture destination)
         {
-            // Strict bypass: If MatchManager is in WaitingForPlayers (Lobby) state, disable Fog of War overlay entirely
-            if (HunterVsHider.Managers.MatchManager.Instance == null ||
-                HunterVsHider.Managers.MatchManager.Instance.CurrentState == HunterVsHider.Managers.MatchState.WaitingForPlayers)
+            var matchMgr = HunterVsHider.Managers.MatchManager.Instance ?? HunterVsHider.Managers.MatchManager.Singleton;
+
+            // 1. Lobby bypass: If MatchManager is in WaitingForPlayers (Lobby) state, disable FoW overlay
+            if (matchMgr == null || matchMgr.CurrentState == HunterVsHider.Managers.MatchState.WaitingForPlayers)
             {
                 Graphics.Blit(source, destination);
                 return;
+            }
+
+            // 2. PrepPhase Asymmetrical Fog of War:
+            // - Assassin (God-View): Completely disable Fog of War overlay so the entire generated maze is crystal clear.
+            // - Police (Prep Zone): Fog of War remains strictly ENABLED, masking unrevealed areas and the combat arena.
+            if (matchMgr.CurrentState == HunterVsHider.Managers.MatchState.PrepPhase)
+            {
+                var localPlayer = GetLocalPlayerState();
+                if (localPlayer != null && localPlayer.Role == HunterVsHider.Player.PlayerRole.Assassin)
+                {
+                    Graphics.Blit(source, destination);
+                    return;
+                }
             }
 
             if (fowMaterial == null || fowShader == null)
@@ -119,6 +133,19 @@ namespace HunterVsHider.Vision
             }
 
             Graphics.Blit(source, destination, fowMaterial);
+        }
+
+        private HunterVsHider.Player.PlayerNetworkState GetLocalPlayerState()
+        {
+            if (Unity.Netcode.NetworkManager.Singleton != null && Unity.Netcode.NetworkManager.Singleton.LocalClient != null)
+            {
+                var playerObj = Unity.Netcode.NetworkManager.Singleton.LocalClient.PlayerObject;
+                if (playerObj != null)
+                {
+                    return playerObj.GetComponent<HunterVsHider.Player.PlayerNetworkState>();
+                }
+            }
+            return null;
         }
 
         private void OnDestroy()

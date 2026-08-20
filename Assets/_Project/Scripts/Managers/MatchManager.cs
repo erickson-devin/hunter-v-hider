@@ -51,6 +51,18 @@ namespace HunterVsHider.Managers
 
         public int SelectedMapSize => selectedMapSize.Value;
 
+        [Header("Map Generation State")]
+        [Tooltip("Deterministic random seed for procedural arena map generation. Read: Everyone, Write: Server.")]
+        public NetworkVariable<int> mapGenerationSeed = new NetworkVariable<int>(
+            0,
+            NetworkVariableReadPermission.Everyone,
+            NetworkVariableWritePermission.Server
+        );
+
+        public int MapGenerationSeed => mapGenerationSeed.Value;
+
+        public event Action<int> OnMapSeedReceived;
+
         /// <summary>
         /// Server-only method to update the selected map size boundary.
         /// </summary>
@@ -65,6 +77,50 @@ namespace HunterVsHider.Managers
 
             selectedMapSize.Value = newSize;
             Debug.Log($"[MatchManager] Server updated selectedMapSize to: {newSize}x{newSize}");
+        }
+
+        /// <summary>
+        /// Server-only method to generate a new deterministic map seed.
+        /// </summary>
+        public void CmdGenerateNewMap()
+        {
+            if (!IsServer)
+            {
+                Debug.LogWarning("[MatchManager] CmdGenerateNewMap can only be executed on the Server/Host! Forwarding to RequestGenerateNewMap().");
+                RequestGenerateNewMap();
+                return;
+            }
+
+            int current = mapGenerationSeed.Value;
+            int newSeed;
+            do
+            {
+                newSeed = UnityEngine.Random.Range(1, 999999);
+            } while (newSeed == current);
+
+            mapGenerationSeed.Value = newSeed;
+            Debug.Log($"[MatchManager] Server generated new map seed: {newSeed}");
+        }
+
+        /// <summary>
+        /// Requests map regeneration from either Host or Client (Assassin).
+        /// </summary>
+        public void RequestGenerateNewMap()
+        {
+            if (IsServer)
+            {
+                CmdGenerateNewMap();
+            }
+            else
+            {
+                RequestGenerateNewMapServerRpc();
+            }
+        }
+
+        [Rpc(SendTo.Server)]
+        private void RequestGenerateNewMapServerRpc()
+        {
+            CmdGenerateNewMap();
         }
 
         [Header("UI Configuration")]
@@ -99,16 +155,33 @@ namespace HunterVsHider.Managers
             base.OnNetworkSpawn();
             FindZoneReferencesIfNull();
             currentMatchState.OnValueChanged += HandleMatchStateChanged;
+            mapGenerationSeed.OnValueChanged += HandleMapSeedChanged;
 
             // Process initial state immediately (crucial for late-joining clients)
             HandleMatchStateChanged(MatchState.WaitingForPlayers, currentMatchState.Value);
-            Debug.Log($"[MatchManager] OnNetworkSpawn -> Initial State: {currentMatchState.Value}, IsServer: {IsServer}, IsClient: {IsClient}");
+
+            if (mapGenerationSeed.Value > 0)
+            {
+                HandleMapSeedChanged(0, mapGenerationSeed.Value);
+            }
+
+            Debug.Log($"[MatchManager] OnNetworkSpawn -> Initial State: {currentMatchState.Value}, MapSeed: {mapGenerationSeed.Value}, IsServer: {IsServer}, IsClient: {IsClient}");
         }
 
         public override void OnNetworkDespawn()
         {
             base.OnNetworkDespawn();
             currentMatchState.OnValueChanged -= HandleMatchStateChanged;
+            mapGenerationSeed.OnValueChanged -= HandleMapSeedChanged;
+        }
+
+        private void HandleMapSeedChanged(int previousSeed, int newSeed)
+        {
+            if (newSeed > 0)
+            {
+                Debug.Log($"[MatchManager] Map Generation Seed updated: {previousSeed} -> {newSeed}");
+                OnMapSeedReceived?.Invoke(newSeed);
+            }
         }
 
         public void FindZoneReferencesIfNull()
@@ -233,6 +306,12 @@ namespace HunterVsHider.Managers
                 PlayerRole assignedRole = (i == assassinIndex) ? PlayerRole.Assassin : PlayerRole.Police;
                 connectedPlayers[i].ServerAssignRole(assignedRole);
                 Debug.Log($"[MatchManager] Assigned ClientId {connectedPlayers[i].OwnerClientId} -> {assignedRole}");
+            }
+
+            // Generate initial procedural map seed if not yet generated
+            if (mapGenerationSeed.Value == 0)
+            {
+                CmdGenerateNewMap();
             }
 
             // Once roles are assigned, instantly transition to PrepPhase
