@@ -84,6 +84,22 @@ namespace HunterVsHider.Editor
                 Debug.Log("[SetupTaskRelay] Created RelayLobbyUI GameObject in Tactical_Main.");
             }
 
+            // Ensure CameraFollow and PlayerCamera components exist on Main Camera
+            var mainCam = Camera.main;
+            if (mainCam != null)
+            {
+                if (mainCam.GetComponent<HunterVsHider.Cameras.CameraFollow>() == null)
+                {
+                    mainCam.gameObject.AddComponent<HunterVsHider.Cameras.CameraFollow>();
+                    anyChanged = true;
+                }
+                if (mainCam.GetComponent<HunterVsHider.Cameras.PlayerCamera>() == null)
+                {
+                    mainCam.gameObject.AddComponent<HunterVsHider.Cameras.PlayerCamera>();
+                    anyChanged = true;
+                }
+            }
+
             Canvas canvas = lobbyCanvasObj.GetComponent<Canvas>();
             if (canvas == null)
             {
@@ -141,7 +157,7 @@ namespace HunterVsHider.Editor
             mainMenuRt.anchorMin = new Vector2(0.5f, 0.5f);
             mainMenuRt.anchorMax = new Vector2(0.5f, 0.5f);
             mainMenuRt.pivot = new Vector2(0.5f, 0.5f);
-            mainMenuRt.sizeDelta = new Vector2(560, 520);
+            mainMenuRt.sizeDelta = new Vector2(560, 460);
             mainMenuRt.anchoredPosition = Vector2.zero;
 
             Image mainBg = mainMenuObj.GetComponent<Image>();
@@ -150,43 +166,53 @@ namespace HunterVsHider.Editor
 
             // Title
             GameObject titleObj = GetOrCreateChild(mainMenuObj, "TitleText");
-            SetupText(titleObj, standardFont, "HUNTER v HIDER", 30, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.3f, 0.75f, 1.0f));
+            SetupText(titleObj, standardFont, "HUNTER v HIDER", 28, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.3f, 0.75f, 1.0f));
             RectTransform titleRt = titleObj.GetComponent<RectTransform>();
             titleRt.anchorMin = new Vector2(0.5f, 1f);
             titleRt.anchorMax = new Vector2(0.5f, 1f);
             titleRt.pivot = new Vector2(0.5f, 1f);
-            titleRt.sizeDelta = new Vector2(500, 40);
-            titleRt.anchoredPosition = new Vector2(0, -25);
-
-            // Subtitle
-            GameObject subObj = GetOrCreateChild(mainMenuObj, "SubtitleText");
-            SetupText(subObj, standardFont, "RELAY MATCHMAKING LOBBY", 14, FontStyle.Normal, TextAnchor.MiddleCenter, new Color(0.7f, 0.75f, 0.8f));
-            RectTransform subRt = subObj.GetComponent<RectTransform>();
-            subRt.anchorMin = new Vector2(0.5f, 1f);
-            subRt.anchorMax = new Vector2(0.5f, 1f);
-            subRt.pivot = new Vector2(0.5f, 1f);
-            subRt.sizeDelta = new Vector2(500, 24);
-            subRt.anchoredPosition = new Vector2(0, -65);
+            titleRt.sizeDelta = new Vector2(500, 36);
+            titleRt.anchoredPosition = new Vector2(0, -20);
 
             // Status Text
             GameObject statusObj = GetOrCreateChild(mainMenuObj, "StatusText");
-            Text statusText = SetupText(statusObj, standardFont, "Ready.", 15, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(1.0f, 0.85f, 0.3f));
+            Text statusText = SetupText(statusObj, standardFont, "Ready.", 14, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(1.0f, 0.85f, 0.3f));
             RectTransform statusRt = statusObj.GetComponent<RectTransform>();
             statusRt.anchorMin = new Vector2(0.5f, 1f);
             statusRt.anchorMax = new Vector2(0.5f, 1f);
             statusRt.pivot = new Vector2(0.5f, 1f);
-            statusRt.sizeDelta = new Vector2(520, 45);
-            statusRt.anchoredPosition = new Vector2(0, -95);
+            statusRt.sizeDelta = new Vector2(520, 28);
+            statusRt.anchoredPosition = new Vector2(0, -56);
 
-            // Host Button
+            // Host Button (Relay)
             GameObject hostBtnObj = GetOrCreateChild(mainMenuObj, "Button_HostGame");
-            Button hostBtn = SetupButton(hostBtnObj, standardFont, "Host Game (Relay)", 18, new Color(0.15f, 0.40f, 0.75f), Color.white);
+            Button hostBtn = SetupButton(hostBtnObj, standardFont, "Host Game (Relay)", 16, new Color(0.15f, 0.40f, 0.75f), Color.white);
             RectTransform hostBtnRt = hostBtnObj.GetComponent<RectTransform>();
             hostBtnRt.anchorMin = new Vector2(0.5f, 1f);
             hostBtnRt.anchorMax = new Vector2(0.5f, 1f);
             hostBtnRt.pivot = new Vector2(0.5f, 1f);
-            hostBtnRt.sizeDelta = new Vector2(460, 52);
-            hostBtnRt.anchoredPosition = new Vector2(0, -155);
+            hostBtnRt.sizeDelta = new Vector2(460, 42);
+            hostBtnRt.anchoredPosition = new Vector2(0, -92);
+
+            // Input Field
+            GameObject inputFieldObj = GetOrCreateChild(mainMenuObj, "InputField_JoinCode");
+            InputField joinInput = SetupInputField(inputFieldObj, standardFont, "ENTER 6-CHAR CODE");
+            RectTransform inputRt = inputFieldObj.GetComponent<RectTransform>();
+            inputRt.anchorMin = new Vector2(0.5f, 1f);
+            inputRt.anchorMax = new Vector2(0.5f, 1f);
+            inputRt.pivot = new Vector2(0.5f, 1f);
+            inputRt.sizeDelta = new Vector2(460, 42);
+            inputRt.anchoredPosition = new Vector2(0, -142);
+
+            // Join Button (Relay)
+            GameObject joinBtnObj = GetOrCreateChild(mainMenuObj, "Button_JoinGame");
+            Button joinBtn = SetupButton(joinBtnObj, standardFont, "Join Game (Relay)", 16, new Color(0.16f, 0.52f, 0.32f), Color.white);
+            RectTransform joinBtnRt = joinBtnObj.GetComponent<RectTransform>();
+            joinBtnRt.anchorMin = new Vector2(0.5f, 1f);
+            joinBtnRt.anchorMax = new Vector2(0.5f, 1f);
+            joinBtnRt.pivot = new Vector2(0.5f, 1f);
+            joinBtnRt.sizeDelta = new Vector2(460, 42);
+            joinBtnRt.anchoredPosition = new Vector2(0, -192);
 
             // Divider
             GameObject divObj = GetOrCreateChild(mainMenuObj, "Divider");
@@ -196,40 +222,30 @@ namespace HunterVsHider.Editor
             divRt.anchorMax = new Vector2(0.5f, 1f);
             divRt.pivot = new Vector2(0.5f, 1f);
             divRt.sizeDelta = new Vector2(460, 2);
-            divRt.anchoredPosition = new Vector2(0, -230);
+            divRt.anchoredPosition = new Vector2(0, -244);
             Image divImg = divObj.GetComponent<Image>();
             if (divImg == null) divImg = divObj.AddComponent<Image>();
             divImg.color = new Color(0.2f, 0.25f, 0.32f, 0.7f);
 
-            // Join Label
-            GameObject joinLabelObj = GetOrCreateChild(mainMenuObj, "JoinSectionLabel");
-            SetupText(joinLabelObj, standardFont, "JOIN EXISTING SESSION", 13, FontStyle.Normal, TextAnchor.MiddleCenter, new Color(0.7f, 0.75f, 0.8f));
-            RectTransform joinLabelRt = joinLabelObj.GetComponent<RectTransform>();
-            joinLabelRt.anchorMin = new Vector2(0.5f, 1f);
-            joinLabelRt.anchorMax = new Vector2(0.5f, 1f);
-            joinLabelRt.pivot = new Vector2(0.5f, 1f);
-            joinLabelRt.sizeDelta = new Vector2(460, 22);
-            joinLabelRt.anchoredPosition = new Vector2(0, -250);
+            // Host LAN Button
+            GameObject hostLanBtnObj = GetOrCreateChild(mainMenuObj, "Button_HostLan");
+            Button hostLanBtn = SetupButton(hostLanBtnObj, standardFont, "Host Game (Local LAN)", 16, new Color(0.24f, 0.32f, 0.60f), Color.white);
+            RectTransform hostLanBtnRt = hostLanBtnObj.GetComponent<RectTransform>();
+            hostLanBtnRt.anchorMin = new Vector2(0.5f, 1f);
+            hostLanBtnRt.anchorMax = new Vector2(0.5f, 1f);
+            hostLanBtnRt.pivot = new Vector2(0.5f, 1f);
+            hostLanBtnRt.sizeDelta = new Vector2(460, 42);
+            hostLanBtnRt.anchoredPosition = new Vector2(0, -260);
 
-            // Input Field
-            GameObject inputFieldObj = GetOrCreateChild(mainMenuObj, "InputField_JoinCode");
-            InputField joinInput = SetupInputField(inputFieldObj, standardFont, "ENTER 6-CHAR CODE");
-            RectTransform inputRt = inputFieldObj.GetComponent<RectTransform>();
-            inputRt.anchorMin = new Vector2(0.5f, 1f);
-            inputRt.anchorMax = new Vector2(0.5f, 1f);
-            inputRt.pivot = new Vector2(0.5f, 1f);
-            inputRt.sizeDelta = new Vector2(460, 52);
-            inputRt.anchoredPosition = new Vector2(0, -285);
-
-            // Join Button
-            GameObject joinBtnObj = GetOrCreateChild(mainMenuObj, "Button_JoinGame");
-            Button joinBtn = SetupButton(joinBtnObj, standardFont, "Join Game (Relay)", 18, new Color(0.16f, 0.52f, 0.32f), Color.white);
-            RectTransform joinBtnRt = joinBtnObj.GetComponent<RectTransform>();
-            joinBtnRt.anchorMin = new Vector2(0.5f, 1f);
-            joinBtnRt.anchorMax = new Vector2(0.5f, 1f);
-            joinBtnRt.pivot = new Vector2(0.5f, 1f);
-            joinBtnRt.sizeDelta = new Vector2(460, 52);
-            joinBtnRt.anchoredPosition = new Vector2(0, -355);
+            // Join LAN Button
+            GameObject joinLanBtnObj = GetOrCreateChild(mainMenuObj, "Button_JoinLan");
+            Button joinLanBtn = SetupButton(joinLanBtnObj, standardFont, "Join Game (Local LAN)", 16, new Color(0.18f, 0.48f, 0.48f), Color.white);
+            RectTransform joinLanBtnRt = joinLanBtnObj.GetComponent<RectTransform>();
+            joinLanBtnRt.anchorMin = new Vector2(0.5f, 1f);
+            joinLanBtnRt.anchorMax = new Vector2(0.5f, 1f);
+            joinLanBtnRt.pivot = new Vector2(0.5f, 1f);
+            joinLanBtnRt.sizeDelta = new Vector2(460, 42);
+            joinLanBtnRt.anchoredPosition = new Vector2(0, -310);
 
             // ==========================================
             // 6. WAITING ROOM PANEL (Disabled by default)
@@ -289,14 +305,40 @@ namespace HunterVsHider.Editor
             copyPersistentRt.offsetMax = Vector2.zero;
 
             // Connected Players Box
+            // Map Size Selector Card
+            GameObject mapSizeCardObj = GetOrCreateChild(waitingObj, "MapSizeCard");
+            RectTransform mapSizeCardRt = mapSizeCardObj.GetComponent<RectTransform>();
+            if (mapSizeCardRt == null) mapSizeCardRt = mapSizeCardObj.AddComponent<RectTransform>();
+            mapSizeCardRt.anchorMin = new Vector2(0.5f, 1f);
+            mapSizeCardRt.anchorMax = new Vector2(0.5f, 1f);
+            mapSizeCardRt.pivot = new Vector2(0.5f, 1f);
+            mapSizeCardRt.sizeDelta = new Vector2(560, 50);
+            mapSizeCardRt.anchoredPosition = new Vector2(0, -155);
+            Image mapSizeBg = mapSizeCardObj.GetComponent<Image>();
+            if (mapSizeBg == null) mapSizeBg = mapSizeCardObj.AddComponent<Image>();
+            mapSizeBg.color = new Color(0.04f, 0.05f, 0.08f, 0.9f);
+
+            // Label
+            GameObject mapSizeLabelObj = GetOrCreateChild(mapSizeCardObj, "Label_MapSize");
+            SetupTMPText(mapSizeLabelObj, "MAP SIZE:", 15, FontStyles.Bold, TextAlignmentOptions.MidlineLeft, new Color(0.65f, 0.80f, 1.0f));
+            RectTransform mapSizeLabelRt = mapSizeLabelObj.GetComponent<RectTransform>();
+            mapSizeLabelRt.anchorMin = new Vector2(0f, 0f);
+            mapSizeLabelRt.anchorMax = new Vector2(0.45f, 1f);
+            mapSizeLabelRt.offsetMin = new Vector2(16, 0);
+            mapSizeLabelRt.offsetMax = new Vector2(0, 0);
+
+            // Dropdown (Native TMP_Dropdown with valid Template hierarchy)
+            TMP_Dropdown mapSizeDropdown = SetupNativeTMPDropdown(mapSizeCardObj.transform, "Dropdown_MapSize", new System.Collections.Generic.List<string> { "50", "100", "250" });
+
+            // Connected Players Box
             GameObject playersCardObj = GetOrCreateChild(waitingObj, "ConnectedPlayersBox");
             RectTransform playersCardRt = playersCardObj.GetComponent<RectTransform>();
             if (playersCardRt == null) playersCardRt = playersCardObj.AddComponent<RectTransform>();
             playersCardRt.anchorMin = new Vector2(0.5f, 1f);
             playersCardRt.anchorMax = new Vector2(0.5f, 1f);
             playersCardRt.pivot = new Vector2(0.5f, 1f);
-            playersCardRt.sizeDelta = new Vector2(560, 175);
-            playersCardRt.anchoredPosition = new Vector2(0, -160);
+            playersCardRt.sizeDelta = new Vector2(560, 130);
+            playersCardRt.anchoredPosition = new Vector2(0, -215);
             Image playersCardBg = playersCardObj.GetComponent<Image>();
             if (playersCardBg == null) playersCardBg = playersCardObj.AddComponent<Image>();
             playersCardBg.color = new Color(0.04f, 0.05f, 0.08f, 0.85f);
@@ -318,7 +360,7 @@ namespace HunterVsHider.Editor
             waitStatusRt.anchorMax = new Vector2(0.5f, 1f);
             waitStatusRt.pivot = new Vector2(0.5f, 1f);
             waitStatusRt.sizeDelta = new Vector2(560, 35);
-            waitStatusRt.anchoredPosition = new Vector2(0, -350);
+            waitStatusRt.anchoredPosition = new Vector2(0, -355);
 
             // Start Match Button
             GameObject startMatchBtnObj = GetOrCreateChild(waitingObj, "Button_StartMatch");
@@ -337,10 +379,13 @@ namespace HunterVsHider.Editor
             lobbyUI.buttonHostGame = hostBtn;
             lobbyUI.inputJoinCode = joinInput;
             lobbyUI.buttonJoinGame = joinBtn;
+            lobbyUI.buttonHostLan = hostLanBtn;
+            lobbyUI.buttonJoinLan = joinLanBtn;
             lobbyUI.textStatus = statusText;
 
             lobbyUI.txtPersistentJoinCode = pCodeText;
             lobbyUI.txtConnectedPlayers = pListText;
+            lobbyUI.dropdownMapSize = mapSizeDropdown;
             lobbyUI.buttonStartMatch = startMatchBtn;
             lobbyUI.buttonCopyPersistentCode = copyPersistentBtn;
             lobbyUI.txtWaitingStatus = waitStatusText;
@@ -458,6 +503,114 @@ namespace HunterVsHider.Editor
             input.contentType = InputField.ContentType.Alphanumeric;
 
             return input;
+        }
+
+        private static TMP_Dropdown SetupNativeTMPDropdown(Transform parent, string name, System.Collections.Generic.List<string> options)
+        {
+            Transform existing = parent.Find(name);
+            if (existing != null)
+            {
+                Object.DestroyImmediate(existing.gameObject);
+            }
+
+            GameObject dropdownObj = TMPro.TMP_DefaultControls.CreateDropdown(new TMPro.TMP_DefaultControls.Resources());
+            dropdownObj.name = name;
+            dropdownObj.transform.SetParent(parent, false);
+
+            RectTransform dropdownRt = dropdownObj.GetComponent<RectTransform>();
+            dropdownRt.anchorMin = new Vector2(0.50f, 0.10f);
+            dropdownRt.anchorMax = new Vector2(0.96f, 0.90f);
+            dropdownRt.offsetMin = Vector2.zero;
+            dropdownRt.offsetMax = Vector2.zero;
+
+            Image bg = dropdownObj.GetComponent<Image>();
+            if (bg != null) bg.color = new Color(0.10f, 0.14f, 0.20f, 1f);
+
+            TMP_Dropdown dropdown = dropdownObj.GetComponent<TMP_Dropdown>();
+            dropdown.ClearOptions();
+            dropdown.AddOptions(options);
+
+            // 1. Style caption text
+            if (dropdown.captionText != null)
+            {
+                dropdown.captionText.fontSize = 16;
+                dropdown.captionText.fontStyle = FontStyles.Bold;
+                dropdown.captionText.alignment = TextAlignmentOptions.Center;
+                dropdown.captionText.color = Color.white;
+            }
+
+            // 2. Style Template Background (#111620 - Dark Slate / Navy)
+            if (dropdown.template != null)
+            {
+                Image templateBg = dropdown.template.GetComponent<Image>();
+                if (templateBg != null) templateBg.color = new Color(0.067f, 0.086f, 0.125f, 0.98f);
+
+                // 3. Style Viewport -> Content -> Item hierarchy
+                Transform itemTrans = dropdown.template.Find("Viewport/Content/Item");
+                if (itemTrans != null)
+                {
+                    // Item Background (#1A2230 - Dark Blue / Grey hover state)
+                    Transform itemBgTrans = itemTrans.Find("Item Background");
+                    if (itemBgTrans != null)
+                    {
+                        Image itemBgImg = itemBgTrans.GetComponent<Image>();
+                        if (itemBgImg != null) itemBgImg.color = new Color(0.102f, 0.133f, 0.188f, 1f);
+                    }
+
+                    // Toggle button color block
+                    Toggle itemToggle = itemTrans.GetComponent<Toggle>();
+                    if (itemToggle != null)
+                    {
+                        ColorBlock cb = itemToggle.colors;
+                        cb.normalColor = new Color(0.067f, 0.086f, 0.125f, 1f);
+                        cb.highlightedColor = new Color(0.14f, 0.19f, 0.28f, 1f);
+                        cb.pressedColor = new Color(0.20f, 0.28f, 0.40f, 1f);
+                        cb.selectedColor = new Color(0.12f, 0.16f, 0.24f, 1f);
+                        itemToggle.colors = cb;
+                    }
+
+                    // Item Checkmark (Bright Green #33F5A6)
+                    Transform itemCheckTrans = itemTrans.Find("Item Checkmark");
+                    if (itemCheckTrans != null)
+                    {
+                        Image itemCheckImg = itemCheckTrans.GetComponent<Image>();
+                        if (itemCheckImg != null) itemCheckImg.color = new Color(0.2f, 0.95f, 0.65f, 1f);
+                    }
+
+                    // Item Label (Crisp White Text)
+                    Transform itemLabelTrans = itemTrans.Find("Item Label");
+                    if (itemLabelTrans != null)
+                    {
+                        TMP_Text itemLabel = itemLabelTrans.GetComponent<TMP_Text>();
+                        if (itemLabel != null)
+                        {
+                            itemLabel.fontSize = 15;
+                            itemLabel.fontStyle = FontStyles.Bold;
+                            itemLabel.color = Color.white;
+                        }
+                    }
+                }
+
+                // 4. Style Scrollbar (Transparent background, Dark Grey handle)
+                Transform scrollbarTrans = dropdown.template.Find("Scrollbar");
+                if (scrollbarTrans != null)
+                {
+                    Image scrollbarBg = scrollbarTrans.GetComponent<Image>();
+                    if (scrollbarBg != null) scrollbarBg.color = new Color(0f, 0f, 0f, 0f);
+
+                    Transform handleTrans = scrollbarTrans.Find("Sliding Area/Handle");
+                    if (handleTrans != null)
+                    {
+                        Image handleImg = handleTrans.GetComponent<Image>();
+                        if (handleImg != null) handleImg.color = new Color(0.25f, 0.32f, 0.42f, 0.8f);
+                    }
+                }
+
+                // Ensure Template GameObject is disabled by default (enabled at runtime by TMP_Dropdown)
+                dropdown.template.gameObject.SetActive(false);
+            }
+
+            return dropdown;
         }
 
         [MenuItem("Tools/Hunter v Hider/Build Windows Standalone")]

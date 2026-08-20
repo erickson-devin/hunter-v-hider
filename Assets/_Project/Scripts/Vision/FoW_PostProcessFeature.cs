@@ -64,6 +64,14 @@ namespace HunterVsHider.Vision
         [ImageEffectOpaque]
         private void OnRenderImage(RenderTexture source, RenderTexture destination)
         {
+            // Strict bypass: If MatchManager is in WaitingForPlayers (Lobby) state, disable Fog of War overlay entirely
+            if (HunterVsHider.Managers.MatchManager.Instance == null ||
+                HunterVsHider.Managers.MatchManager.Instance.CurrentState == HunterVsHider.Managers.MatchState.WaitingForPlayers)
+            {
+                Graphics.Blit(source, destination);
+                return;
+            }
+
             if (fowMaterial == null || fowShader == null)
             {
                 EnsureResources();

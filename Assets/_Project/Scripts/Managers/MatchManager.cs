@@ -19,6 +19,7 @@ namespace HunterVsHider.Managers
     public class MatchManager : NetworkBehaviour
     {
         public static MatchManager Instance { get; private set; }
+        public static MatchManager Singleton => Instance;
 
         [Header("Zone References")]
         [Tooltip("Root container / spawn location for pre-match Lobby (Position: X=1000, Y=0, Z=0)")]
@@ -39,6 +40,32 @@ namespace HunterVsHider.Managers
         );
 
         public MatchState CurrentState => currentMatchState.Value;
+
+        [Header("Map Size Configuration")]
+        [Tooltip("Networked arena map boundary size (50, 100, or 250). Read: Everyone, Write: Server.")]
+        public NetworkVariable<int> selectedMapSize = new NetworkVariable<int>(
+            50,
+            NetworkVariableReadPermission.Everyone,
+            NetworkVariableWritePermission.Server
+        );
+
+        public int SelectedMapSize => selectedMapSize.Value;
+
+        /// <summary>
+        /// Server-only method to update the selected map size boundary.
+        /// </summary>
+        /// <param name="newSize">Target map size (e.g. 50, 100, 250)</param>
+        public void CmdSetMapSize(int newSize)
+        {
+            if (!IsServer)
+            {
+                Debug.LogWarning("[MatchManager] CmdSetMapSize can only be executed on the Server/Host!");
+                return;
+            }
+
+            selectedMapSize.Value = newSize;
+            Debug.Log($"[MatchManager] Server updated selectedMapSize to: {newSize}x{newSize}");
+        }
 
         [Header("UI Configuration")]
         [SerializeField] private bool showMatchHUD = true;
@@ -70,8 +97,12 @@ namespace HunterVsHider.Managers
         public override void OnNetworkSpawn()
         {
             base.OnNetworkSpawn();
+            FindZoneReferencesIfNull();
             currentMatchState.OnValueChanged += HandleMatchStateChanged;
-            Debug.Log($"[MatchManager] OnNetworkSpawn -> Current State: {currentMatchState.Value}, IsServer: {IsServer}");
+
+            // Process initial state immediately (crucial for late-joining clients)
+            HandleMatchStateChanged(MatchState.WaitingForPlayers, currentMatchState.Value);
+            Debug.Log($"[MatchManager] OnNetworkSpawn -> Initial State: {currentMatchState.Value}, IsServer: {IsServer}, IsClient: {IsClient}");
         }
 
         public override void OnNetworkDespawn()
@@ -263,8 +294,79 @@ namespace HunterVsHider.Managers
 
         private void HandleMatchStateChanged(MatchState previousState, MatchState newState)
         {
-            Debug.Log($"[MatchManager] MatchState changed from {previousState} to {newState}");
+            Debug.Log($"[MatchManager] MatchState changed from {previousState} to {newState} (IsServer: {IsServer}, IsClient: {IsClient})");
+            FindZoneReferencesIfNull();
+
+            // When state transitions into PrepPhase, local clients immediately respond and execute zone movement
+            if (newState == MatchState.PrepPhase)
+            {
+                ExecuteLocalClientPrepPhaseResponse();
+            }
+
             OnMatchStateChanged?.Invoke(previousState, newState);
+        }
+
+        /// <summary>
+        /// Executes client-side / local player zone positioning response when entering PrepPhase.
+        /// Ensures the local player moves to Zone_PolicePrep or Zone_CombatArena even if network RPCs are delayed.
+        /// </summary>
+        public void ExecuteLocalClientPrepPhaseResponse()
+        {
+            FindZoneReferencesIfNull();
+
+            if (NetworkManager.Singleton == null || NetworkManager.Singleton.LocalClient == null) return;
+            var localPlayerObj = NetworkManager.Singleton.LocalClient.PlayerObject;
+            if (localPlayerObj == null) return;
+
+            var playerState = localPlayerObj.GetComponent<PlayerNetworkState>();
+            if (playerState == null) return;
+
+            Vector3 targetSpawn;
+            Quaternion targetRot;
+
+            if (playerState.Role == PlayerRole.Police)
+            {
+                Vector3 policePrepPos = zonePolicePrep != null ? zonePolicePrep.position : new Vector3(2000f, 0f, 0f);
+                float offsetX = (playerState.OwnerClientId % 4) * 2.5f - 3.75f;
+                float offsetZ = (playerState.OwnerClientId / 4) * 2.5f - 2f;
+                targetSpawn = policePrepPos + new Vector3(offsetX, 1f, offsetZ);
+                targetRot = Quaternion.identity;
+            }
+            else if (playerState.Role == PlayerRole.Assassin)
+            {
+                Vector3 combatArenaPos = zoneCombatArena != null ? zoneCombatArena.position : Vector3.zero;
+                targetSpawn = combatArenaPos + new Vector3(0f, 1f, 18f);
+                targetRot = Quaternion.Euler(0f, 180f, 0f);
+            }
+            else
+            {
+                targetSpawn = zoneLobby != null ? zoneLobby.position + Vector3.up : new Vector3(1000f, 1f, 0f);
+                targetRot = Quaternion.identity;
+            }
+
+            // Immediately set local transform and physics position
+            localPlayerObj.transform.position = targetSpawn;
+            localPlayerObj.transform.rotation = targetRot;
+
+            var rb = localPlayerObj.GetComponent<Rigidbody>();
+            if (rb != null)
+            {
+                rb.position = targetSpawn;
+                rb.rotation = targetRot;
+                rb.linearVelocity = Vector3.zero;
+                rb.angularVelocity = Vector3.zero;
+            }
+
+            var netTransform = localPlayerObj.GetComponent<Unity.Netcode.Components.NetworkTransform>();
+            if (netTransform != null && playerState.IsOwner)
+            {
+                netTransform.Teleport(targetSpawn, targetRot, localPlayerObj.transform.localScale);
+            }
+
+            // Update local camera and movement
+            playerState.UpdatePrepPhaseCameraAndMovement(MatchState.PrepPhase);
+
+            Debug.Log($"[MatchManager] Local Client {playerState.OwnerClientId} ({playerState.Role}) executed PrepPhase teleport to {targetSpawn}");
         }
 
         private void OnGUI()

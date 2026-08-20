@@ -33,14 +33,39 @@ namespace HunterVsHider.Player
             }
         }
 
+        [Header("Movement Control")]
+        [SerializeField] private bool canMove = true;
+
+        public bool CanMove
+        {
+            get => canMove;
+            set => canMove = value;
+        }
+
+        public void SetMovementEnabled(bool enabled)
+        {
+            canMove = enabled;
+            if (!enabled)
+            {
+                movementInput = Vector3.zero;
+            }
+        }
+
         private void Update()
         {
             if (!IsOwner) return;
 
             // Strict lifecycle separation: Read input in Update
-            movementInput.x = Input.GetAxisRaw("Horizontal");
-            movementInput.z = Input.GetAxisRaw("Vertical");
-            movementInput.y = 0f;
+            if (canMove)
+            {
+                movementInput.x = Input.GetAxisRaw("Horizontal");
+                movementInput.z = Input.GetAxisRaw("Vertical");
+                movementInput.y = 0f;
+            }
+            else
+            {
+                movementInput = Vector3.zero;
+            }
 
             HandleAimingInput();
         }

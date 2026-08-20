@@ -82,6 +82,11 @@ namespace HunterVsHider.Player
             currentRole.OnValueChanged += OnRoleChanged;
             selectedWeaponID.OnValueChanged += OnWeaponChanged;
 
+            if (IsLocalPlayer && HunterVsHider.Managers.MatchManager.Instance != null)
+            {
+                HunterVsHider.Managers.MatchManager.Instance.OnMatchStateChanged += HandleMatchStateChanged;
+            }
+
             // Initialize weapon visual
             UpdateWeaponVisual(selectedWeaponID.Value);
         }
@@ -91,6 +96,51 @@ namespace HunterVsHider.Player
             base.OnNetworkDespawn();
             currentRole.OnValueChanged -= OnRoleChanged;
             selectedWeaponID.OnValueChanged -= OnWeaponChanged;
+
+            if (IsLocalPlayer && HunterVsHider.Managers.MatchManager.Instance != null)
+            {
+                HunterVsHider.Managers.MatchManager.Instance.OnMatchStateChanged -= HandleMatchStateChanged;
+            }
+        }
+
+        private void HandleMatchStateChanged(HunterVsHider.Managers.MatchState previousState, HunterVsHider.Managers.MatchState newState)
+        {
+            if (!IsLocalPlayer) return;
+            UpdatePrepPhaseCameraAndMovement(newState);
+        }
+
+        public void UpdatePrepPhaseCameraAndMovement(HunterVsHider.Managers.MatchState state)
+        {
+            if (!IsLocalPlayer) return;
+
+            var cam = UnityEngine.Camera.main;
+            var camFollow = cam != null ? cam.GetComponent<HunterVsHider.Cameras.CameraFollow>() : null;
+            var playerMovement = GetComponent<PlayerMovement>();
+
+            if (state == HunterVsHider.Managers.MatchState.PrepPhase && Role == PlayerRole.Assassin)
+            {
+                int mapSize = HunterVsHider.Managers.MatchManager.Instance != null ? HunterVsHider.Managers.MatchManager.Instance.SelectedMapSize : 50;
+                if (camFollow != null)
+                {
+                    camFollow.ActivateAssassinSkyView(mapSize);
+                }
+                if (playerMovement != null)
+                {
+                    playerMovement.SetMovementEnabled(false);
+                }
+                Debug.Log($"[PlayerNetworkState] Assassin entering PrepPhase -> Activated Sky Camera for {mapSize}x{mapSize} grid and disabled movement.");
+            }
+            else
+            {
+                if (camFollow != null && camFollow.IsSkyViewActive)
+                {
+                    camFollow.ResetToTacticalView();
+                }
+                if (playerMovement != null && !playerMovement.CanMove)
+                {
+                    playerMovement.SetMovementEnabled(true);
+                }
+            }
         }
 
         private void OnRoleChanged(PlayerRole previousRole, PlayerRole newRole)
@@ -101,6 +151,18 @@ namespace HunterVsHider.Player
             if (IsOwner)
             {
                 ApplyRoleVision();
+
+                if (HunterVsHider.Managers.MatchManager.Instance != null)
+                {
+                    if (HunterVsHider.Managers.MatchManager.Instance.CurrentState == HunterVsHider.Managers.MatchState.PrepPhase)
+                    {
+                        HunterVsHider.Managers.MatchManager.Instance.ExecuteLocalClientPrepPhaseResponse();
+                    }
+                    else
+                    {
+                        UpdatePrepPhaseCameraAndMovement(HunterVsHider.Managers.MatchManager.Instance.CurrentState);
+                    }
+                }
             }
         }
 
@@ -238,7 +300,14 @@ namespace HunterVsHider.Player
 
             var mainCam = UnityEngine.Camera.main;
             var fowPostProcess = mainCam != null ? mainCam.GetComponent<HunterVsHider.Vision.FoW_PostProcessFeature>() : null;
-            if (fowPostProcess != null) fowPostProcess.enabled = true; // Universal Fog of War
+            
+            bool isLobbyPhase = HunterVsHider.Managers.MatchManager.Instance == null || 
+                               HunterVsHider.Managers.MatchManager.Instance.CurrentState == HunterVsHider.Managers.MatchState.WaitingForPlayers;
+
+            if (fowPostProcess != null)
+            {
+                fowPostProcess.enabled = !isLobbyPhase;
+            }
 
             switch (currentRole.Value)
             {

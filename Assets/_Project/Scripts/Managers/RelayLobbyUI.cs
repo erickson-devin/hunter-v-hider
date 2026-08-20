@@ -23,7 +23,6 @@ namespace HunterVsHider.Managers
         [Tooltip("Waiting room panel displayed while players gather in Zone_Lobby.")]
         public GameObject waitingRoomPanel;
 
-        [Header("Main Menu Elements")]
         [Tooltip("Button to host a Relay match.")]
         public Button buttonHostGame;
 
@@ -32,6 +31,12 @@ namespace HunterVsHider.Managers
 
         [Tooltip("Button for the client to join using the typed code.")]
         public Button buttonJoinGame;
+
+        [Tooltip("Button to host a local LAN match (bypassing Unity Services).")]
+        public Button buttonHostLan;
+
+        [Tooltip("Button to join a local LAN match on 127.0.0.1 (bypassing Unity Services).")]
+        public Button buttonJoinLan;
 
         [Tooltip("Status notification text on the main menu.")]
         public Text textStatus;
@@ -48,6 +53,9 @@ namespace HunterVsHider.Managers
 
         [Tooltip("Button to copy the persistent Join Code to clipboard.")]
         public Button buttonCopyPersistentCode;
+
+        [Tooltip("Dropdown to select the arena map size (Host only).")]
+        public TMP_Dropdown dropdownMapSize;
 
         [Tooltip("Sub-status or instructions in the waiting room.")]
         public TMP_Text txtWaitingStatus;
@@ -90,6 +98,11 @@ namespace HunterVsHider.Managers
             if (MatchManager.Instance != null)
             {
                 MatchManager.Instance.OnMatchStateChanged += HandleMatchStateChanged;
+                MatchManager.Instance.selectedMapSize.OnValueChanged += HandleMapSizeNetworkChanged;
+                if (dropdownMapSize != null)
+                {
+                    dropdownMapSize.SetValueWithoutNotify(GetDropdownIndexForSize(MatchManager.Instance.SelectedMapSize));
+                }
             }
 
             UpdateStatus("Ready. Click Host Game or enter a code to Join.");
@@ -112,6 +125,7 @@ namespace HunterVsHider.Managers
             if (MatchManager.Instance != null)
             {
                 MatchManager.Instance.OnMatchStateChanged -= HandleMatchStateChanged;
+                MatchManager.Instance.selectedMapSize.OnValueChanged -= HandleMapSizeNetworkChanged;
             }
         }
 
@@ -138,6 +152,18 @@ namespace HunterVsHider.Managers
                 buttonJoinGame.onClick.AddListener(OnJoinButtonClicked);
             }
 
+            if (buttonHostLan != null)
+            {
+                buttonHostLan.onClick.RemoveAllListeners();
+                buttonHostLan.onClick.AddListener(OnHostLanButtonClicked);
+            }
+
+            if (buttonJoinLan != null)
+            {
+                buttonJoinLan.onClick.RemoveAllListeners();
+                buttonJoinLan.onClick.AddListener(OnJoinLanButtonClicked);
+            }
+
             if (buttonCopyPersistentCode != null)
             {
                 buttonCopyPersistentCode.onClick.RemoveAllListeners();
@@ -150,6 +176,18 @@ namespace HunterVsHider.Managers
                 buttonStartMatch.onClick.AddListener(OnStartMatchClicked);
             }
 
+            if (dropdownMapSize != null)
+            {
+                dropdownMapSize.ClearOptions();
+                dropdownMapSize.AddOptions(new System.Collections.Generic.List<string> { "50", "100", "250" });
+                dropdownMapSize.onValueChanged.RemoveAllListeners();
+                dropdownMapSize.onValueChanged.AddListener(OnMapSizeDropdownChanged);
+                if (MatchManager.Singleton != null)
+                {
+                    dropdownMapSize.SetValueWithoutNotify(GetDropdownIndexForSize(MatchManager.Singleton.SelectedMapSize));
+                }
+            }
+
             if (inputJoinCode != null)
             {
                 inputJoinCode.characterLimit = 12;
@@ -160,6 +198,66 @@ namespace HunterVsHider.Managers
                         OnJoinButtonClicked();
                     }
                 });
+            }
+        }
+
+        public void OnHostLanButtonClicked()
+        {
+            if (NetworkManager.Singleton == null)
+            {
+                UpdateStatus("Error: NetworkManager not found!");
+                return;
+            }
+
+            SetMainMenuInteractable(false);
+            UpdateStatus("Starting Local LAN Host on 127.0.0.1:7777 (Bypassing Relay)...");
+
+            var transport = NetworkManager.Singleton.GetComponent<Unity.Netcode.Transports.UTP.UnityTransport>();
+            if (transport != null)
+            {
+                transport.SetConnectionData("127.0.0.1", 7777, "0.0.0.0");
+            }
+
+            bool success = NetworkManager.Singleton.StartHost();
+            if (success)
+            {
+                Debug.Log("[RelayLobbyUI] Local LAN Host started successfully on 127.0.0.1:7777.");
+                ShowWaitingRoom("LAN-LOCAL");
+            }
+            else
+            {
+                SetMainMenuInteractable(true);
+                UpdateStatus("Failed to start Local LAN Host.");
+            }
+        }
+
+        public void OnJoinLanButtonClicked()
+        {
+            if (NetworkManager.Singleton == null)
+            {
+                UpdateStatus("Error: NetworkManager not found!");
+                return;
+            }
+
+            SetMainMenuInteractable(false);
+            UpdateStatus("Connecting to Local LAN Host (127.0.0.1:7777)...");
+
+            var transport = NetworkManager.Singleton.GetComponent<Unity.Netcode.Transports.UTP.UnityTransport>();
+            if (transport != null)
+            {
+                transport.SetConnectionData("127.0.0.1", 7777);
+            }
+
+            bool success = NetworkManager.Singleton.StartClient();
+            if (success)
+            {
+                Debug.Log("[RelayLobbyUI] Local LAN Client started -> Connecting to 127.0.0.1:7777.");
+                ShowWaitingRoom("LAN-LOCAL");
+            }
+            else
+            {
+                SetMainMenuInteractable(true);
+                UpdateStatus("Failed to connect to Local LAN Host.");
             }
         }
 
@@ -279,6 +377,45 @@ namespace HunterVsHider.Managers
             if (waitingRoomPanel != null) waitingRoomPanel.SetActive(false);
         }
 
+        public void OnMapSizeDropdownChanged(int index)
+        {
+            if (dropdownMapSize == null || index < 0 || index >= dropdownMapSize.options.Count) return;
+
+            string selectedText = dropdownMapSize.options[index].text.Trim().Replace("x50", "").Replace("x100", "").Replace("x250", "");
+            if (!int.TryParse(selectedText, out int size))
+            {
+                switch (index)
+                {
+                    case 0: size = 50; break;
+                    case 1: size = 100; break;
+                    case 2: size = 250; break;
+                    default: size = 50; break;
+                }
+            }
+
+            if (MatchManager.Singleton != null && NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer)
+            {
+                MatchManager.Singleton.CmdSetMapSize(size);
+                Debug.Log($"[RelayLobbyUI] Host changed Map Size dropdown -> {size} (Parsed from option: {dropdownMapSize.options[index].text})");
+            }
+        }
+
+        private int GetDropdownIndexForSize(int size)
+        {
+            if (size == 100) return 1;
+            if (size == 250) return 2;
+            return 0; // default 50
+        }
+
+        private void HandleMapSizeNetworkChanged(int previousSize, int newSize)
+        {
+            if (dropdownMapSize != null)
+            {
+                dropdownMapSize.SetValueWithoutNotify(GetDropdownIndexForSize(newSize));
+            }
+            Debug.Log($"[RelayLobbyUI] Synced Map Size from network: {newSize}x{newSize}");
+        }
+
         private void UpdateWaitingRoomStatus()
         {
             bool isHost = NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer;
@@ -300,6 +437,12 @@ namespace HunterVsHider.Managers
                 {
                     btnText.text = isHost ? "Start Match" : "Waiting for Host...";
                 }
+            }
+
+            // Configure Map Size dropdown interactability (only Host can modify)
+            if (dropdownMapSize != null)
+            {
+                dropdownMapSize.interactable = isHost;
             }
 
             // Update connected players list
@@ -324,7 +467,7 @@ namespace HunterVsHider.Managers
             if (txtWaitingStatus != null && !txtWaitingStatus.text.Contains("Copied"))
             {
                 txtWaitingStatus.text = isHost
-                    ? "Gather players in Zone_Lobby. Click 'Start Match' when ready."
+                    ? "Gather players in Zone_Lobby. Select Map Size and click 'Start Match' when ready."
                     : "Joined lobby. Waiting for Host to start match...";
             }
         }
@@ -393,6 +536,8 @@ namespace HunterVsHider.Managers
         {
             if (buttonHostGame != null) buttonHostGame.interactable = interactable;
             if (buttonJoinGame != null) buttonJoinGame.interactable = interactable;
+            if (buttonHostLan != null) buttonHostLan.interactable = interactable;
+            if (buttonJoinLan != null) buttonJoinLan.interactable = interactable;
             if (inputJoinCode != null) inputJoinCode.interactable = interactable;
         }
 

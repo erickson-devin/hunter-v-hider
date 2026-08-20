@@ -32,6 +32,7 @@ namespace HunterVsHider.Managers
         private void Start()
         {
             FindLobbyZoneIfNull();
+            SnapCameraToLobby();
 
             if (NetworkManager.Singleton != null)
             {
@@ -47,6 +48,23 @@ namespace HunterVsHider.Managers
             }
         }
 
+        public void SnapCameraToLobby()
+        {
+            FindLobbyZoneIfNull();
+            Vector3 lobbyBase = zoneLobby != null ? zoneLobby.position : fallbackLobbyPosition;
+            var cam = UnityEngine.Camera.main;
+            if (cam != null)
+            {
+                var follow = cam.GetComponent<HunterVsHider.Cameras.CameraFollow>();
+                Vector3 offset = follow != null ? follow.offset : new Vector3(0f, 18f, -10.4f);
+                float pitch = follow != null ? follow.pitch : 60f;
+
+                cam.transform.position = lobbyBase + offset;
+                cam.transform.rotation = Quaternion.Euler(pitch, 0f, 0f);
+                Debug.Log($"[PlayerSpawnManager] Snapped camera to Zone_Lobby view at {cam.transform.position}");
+            }
+        }
+
         private void FindLobbyZoneIfNull()
         {
             if (zoneLobby == null)
@@ -58,6 +76,12 @@ namespace HunterVsHider.Managers
 
         private void HandleClientConnected(ulong clientId)
         {
+            // If local client connected, ensure camera is looking at lobby
+            if (NetworkManager.Singleton != null && clientId == NetworkManager.Singleton.LocalClientId)
+            {
+                SnapCameraToLobby();
+            }
+
             if (!NetworkManager.Singleton.IsServer) return;
 
             // Wait a frame or position immediately when player object is available
