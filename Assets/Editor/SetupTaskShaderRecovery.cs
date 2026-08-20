@@ -7,17 +7,12 @@ using HunterVsHider.Map;
 
 namespace HunterVsHider.EditorScripts
 {
-    [InitializeOnLoad]
     public class SetupTaskShaderRecovery
     {
-        static SetupTaskShaderRecovery()
-        {
-            EditorApplication.delayCall += ExecuteSetup;
-        }
-
         [MenuItem("Tools/Hunter v Hider/Recover Shaders and Apply Gray-Box Theme")]
         public static void ExecuteSetup()
         {
+            if (ParrelSync.ClonesManager.IsClone()) return;
             if (Application.isPlaying) return;
 
             Debug.Log("[SetupTaskShaderRecovery] Starting Shader Recovery & Gray-Box Styling...");

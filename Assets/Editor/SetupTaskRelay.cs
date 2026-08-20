@@ -10,17 +10,12 @@ using HunterVsHider.Managers;
 
 namespace HunterVsHider.Editor
 {
-    [InitializeOnLoad]
     public class SetupTaskRelay
     {
-        static SetupTaskRelay()
-        {
-            EditorApplication.delayCall += ExecuteSetup;
-        }
-
         [MenuItem("Tools/Hunter v Hider/Setup Relay Infrastructure")]
         public static void ExecuteSetup()
         {
+            if (ParrelSync.ClonesManager.IsClone()) return;
             if (Application.isPlaying) return;
 
             Debug.Log("[SetupTaskRelay] Starting Relay Infrastructure & Two-Panel Lobby UI Setup...");

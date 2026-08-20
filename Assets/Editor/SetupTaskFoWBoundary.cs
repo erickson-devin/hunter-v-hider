@@ -6,17 +6,12 @@ using HunterVsHider.Vision;
 
 namespace HunterVsHider.EditorScripts
 {
-    [InitializeOnLoad]
     public class SetupTaskFoWBoundary
     {
-        static SetupTaskFoWBoundary()
-        {
-            EditorApplication.delayCall += ExecuteSetup;
-        }
-
         [MenuItem("Tools/Hunter v Hider/Expand FoW Boundary (300x300m)")]
         public static void ExecuteSetup()
         {
+            if (ParrelSync.ClonesManager.IsClone()) return;
             if (Application.isPlaying) return;
 
             Debug.Log("[SetupTaskFoWBoundary] Expanding Fog of War boundaries to 300x300 meters...");

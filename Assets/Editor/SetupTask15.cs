@@ -3,16 +3,12 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine.SceneManagement;
 
-[InitializeOnLoad]
 public class SetupTask15
 {
-    static SetupTask15()
+    [MenuItem("Tools/Setup Tasks/Task 15")]
+    public static void ExecuteSetup()
     {
-        EditorApplication.delayCall += ExecuteSetup;
-    }
-
-    private static void ExecuteSetup()
-    {
+        if (ParrelSync.ClonesManager.IsClone()) return;
         Scene activeScene = EditorSceneManager.GetActiveScene();
         if (activeScene.name != "Tactical_Main")
         {

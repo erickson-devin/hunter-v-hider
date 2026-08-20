@@ -4,16 +4,12 @@ using UnityEditor.SceneManagement;
 using UnityEngine.SceneManagement;
 using System.IO;
 
-[InitializeOnLoad]
 public class SetupTask11b
 {
-    static SetupTask11b()
+    [MenuItem("Tools/Setup Tasks/Task 11b")]
+    public static void ExecuteFix()
     {
-        EditorApplication.delayCall += ExecuteFix;
-    }
-
-    private static void ExecuteFix()
-    {
+        if (ParrelSync.ClonesManager.IsClone()) return;
         // 1. Create Materials directory if it doesn't exist
         string materialsDir = "Assets/Materials";
         if (!AssetDatabase.IsValidFolder(materialsDir))

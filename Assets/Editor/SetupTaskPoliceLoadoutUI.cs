@@ -6,17 +6,12 @@ using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using HunterVsHider.Managers;
 
-[InitializeOnLoad]
 public class SetupTaskPoliceLoadoutUI
 {
-    static SetupTaskPoliceLoadoutUI()
-    {
-        EditorApplication.delayCall += ExecuteSetup;
-    }
-
     [MenuItem("Tools/Hunter v Hider/Setup Police Loadout UI")]
     public static void ExecuteSetup()
     {
+        if (ParrelSync.ClonesManager.IsClone()) return;
         if (Application.isPlaying) return;
 
         Debug.Log("[SetupTaskPoliceLoadoutUI] Starting Police Loadout UI Setup...");

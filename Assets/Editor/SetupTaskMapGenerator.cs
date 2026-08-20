@@ -9,17 +9,12 @@ using HunterVsHider.Managers;
 
 namespace HunterVsHider.EditorScripts
 {
-    [InitializeOnLoad]
     public class SetupTaskMapGenerator
     {
-        static SetupTaskMapGenerator()
-        {
-            EditorApplication.delayCall += ExecuteSetup;
-        }
-
         [MenuItem("Tools/Hunter v Hider/Setup Map Generator and Assassin UI")]
         public static void ExecuteSetup()
         {
+            if (ParrelSync.ClonesManager.IsClone()) return;
             if (Application.isPlaying) return;
 
             string scenePath = "Assets/_Project/Scenes/Tactical_Main.unity";

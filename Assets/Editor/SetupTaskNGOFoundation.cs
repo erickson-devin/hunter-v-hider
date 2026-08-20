@@ -7,17 +7,12 @@ using UnityEngine.SceneManagement;
 using HunterVsHider.Player;
 using HunterVsHider.Managers;
 
-[InitializeOnLoad]
 public class SetupTaskNGOFoundation
 {
-    static SetupTaskNGOFoundation()
-    {
-        EditorApplication.delayCall += ExecuteSetup;
-    }
-
     [MenuItem("Tools/Hunter v Hider/Setup NGO Foundation")]
     public static void ExecuteSetup()
     {
+        if (ParrelSync.ClonesManager.IsClone()) return;
         if (Application.isPlaying) return;
 
         Debug.Log("[SetupTaskNGOFoundation] Starting NGO Foundation Setup...");

@@ -9,17 +9,12 @@ using HunterVsHider.Map;
 
 namespace HunterVsHider.EditorScripts
 {
-    [InitializeOnLoad]
     public class SetupTaskCombatPhase
     {
-        static SetupTaskCombatPhase()
-        {
-            EditorApplication.delayCall += ExecuteSetup;
-        }
-
         [MenuItem("Tools/Hunter v Hider/Setup Combat Phase Spawning & UI")]
         public static void ExecuteSetup()
         {
+            if (ParrelSync.ClonesManager.IsClone()) return;
             if (Application.isPlaying) return;
 
             Debug.Log("[SetupTaskCombatPhase] Setting up Combat Phase Spawning & UI...");

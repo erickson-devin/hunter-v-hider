@@ -6,17 +6,12 @@ using UnityEngine.SceneManagement;
 using HunterVsHider.Managers;
 using HunterVsHider.Vision;
 
-[InitializeOnLoad]
 public class SetupTaskMatchManager
 {
-    static SetupTaskMatchManager()
-    {
-        EditorApplication.delayCall += ExecuteSetup;
-    }
-
     [MenuItem("Tools/Hunter v Hider/Setup Match State and Zones")]
     public static void ExecuteSetup()
     {
+        if (ParrelSync.ClonesManager.IsClone()) return;
         if (Application.isPlaying) return;
 
         Debug.Log("[SetupTaskMatchManager] Starting Match State & Physical Zones Setup...");

@@ -6,17 +6,12 @@ using UnityEngine.SceneManagement;
 
 namespace HunterVsHider.EditorScripts
 {
-    [InitializeOnLoad]
     public class SetupTaskArenaFloor
     {
-        static SetupTaskArenaFloor()
-        {
-            EditorApplication.delayCall += ExecuteSetup;
-        }
-
         [MenuItem("Tools/Hunter v Hider/Scale and Style Arena Floor")]
         public static void ExecuteSetup()
         {
+            if (ParrelSync.ClonesManager.IsClone()) return;
             if (Application.isPlaying) return;
 
             Debug.Log("[SetupTaskArenaFloor] Starting Arena Floor Scaling and Tactical Styling...");

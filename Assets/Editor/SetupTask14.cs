@@ -3,16 +3,12 @@ using UnityEditor;
 using HunterVsHider.Player;
 using HunterVsHider.Weapons;
 
-[InitializeOnLoad]
 public class SetupTask14
 {
-    static SetupTask14()
+    [MenuItem("Tools/Setup Tasks/Task 14")]
+    public static void AttachManager()
     {
-        EditorApplication.delayCall += AttachManager;
-    }
-
-    private static void AttachManager()
-    {
+        if (ParrelSync.ClonesManager.IsClone()) return;
         string prefabPath = "Assets/_Project/Prefabs/Player.prefab";
         GameObject prefabRoot = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
         if (prefabRoot != null)

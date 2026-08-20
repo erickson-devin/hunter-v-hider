@@ -3,16 +3,12 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine.SceneManagement;
 
-[InitializeOnLoad]
 public class SetupTask13c
 {
-    static SetupTask13c()
+    [MenuItem("Tools/Setup Tasks/Task 13c")]
+    public static void ExecuteCleanup()
     {
-        EditorApplication.delayCall += ExecuteCleanup;
-    }
-
-    private static void ExecuteCleanup()
-    {
+        if (ParrelSync.ClonesManager.IsClone()) return;
         bool sceneChanged = false;
 
         // 1. Clean up active scene

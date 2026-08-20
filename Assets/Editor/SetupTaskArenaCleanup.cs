@@ -8,17 +8,12 @@ using HunterVsHider.Managers;
 
 namespace HunterVsHider.EditorScripts
 {
-    [InitializeOnLoad]
     public class SetupTaskArenaCleanup
     {
-        static SetupTaskArenaCleanup()
-        {
-            EditorApplication.delayCall += ExecuteSetup;
-        }
-
         [MenuItem("Tools/Hunter v Hider/Cleanup Arena and Create Tactical Wall Prefab")]
         public static void ExecuteSetup()
         {
+            if (ParrelSync.ClonesManager.IsClone()) return;
             if (Application.isPlaying) return;
 
             Debug.Log("[SetupTaskArenaCleanup] Starting Arena Cleanup and Prefab creation...");

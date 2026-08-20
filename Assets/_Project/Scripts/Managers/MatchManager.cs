@@ -124,11 +124,6 @@ namespace HunterVsHider.Managers
             CmdGenerateNewMap();
         }
 
-        [Header("UI Configuration")]
-        [SerializeField] private bool showMatchHUD = true;
-        [SerializeField] private int hudOffsetX = 15;
-        [SerializeField] private int hudOffsetY = 345;
-
         public event Action<MatchState, MatchState> OnMatchStateChanged;
 
         private void Awake()
@@ -164,7 +159,13 @@ namespace HunterVsHider.Managers
             {
                 if (obj == null) continue;
                 string objName = obj.name.ToLower();
-                if (objName.Contains("dummy") || objName.Contains("targetdummy") || objName.Contains("testdummy") || obj.CompareTag("Enemy"))
+                bool isPrototypeDummy = objName.Contains("dummy") || 
+                                       objName.Contains("targetdummy") || 
+                                       objName.Contains("testdummy") ||
+                                       objName.Contains("enemy_dummy") ||
+                                       objName.StartsWith("target_dummy");
+
+                if (isPrototypeDummy)
                 {
 #if UNITY_EDITOR
                     if (!Application.isPlaying)
@@ -620,54 +621,7 @@ namespace HunterVsHider.Managers
             Debug.Log($"[MatchManager] Local Client {playerState.OwnerClientId} ({playerState.Role}) transitioned to CombatPhase at {targetSpawn}");
         }
 
-        private void OnGUI()
-        {
-            if (!showMatchHUD) return;
-            if (NetworkManager.Singleton == null || (!NetworkManager.Singleton.IsClient && !NetworkManager.Singleton.IsServer)) return;
 
-            GUILayout.BeginArea(new Rect(hudOffsetX, hudOffsetY, 260, 160), GUI.skin.box);
-
-            GUILayout.Label("<b>== MATCH CONTROLLER ==</b>");
-            GUILayout.Label($"<b>State:</b> <color=yellow>{currentMatchState.Value}</color>");
-
-            if (IsServer)
-            {
-                if (currentMatchState.Value == MatchState.WaitingForPlayers)
-                {
-                    GUI.backgroundColor = new Color(0.2f, 0.8f, 0.2f);
-                    if (GUILayout.Button("<b>START MATCH (Host)</b>", GUILayout.Height(35)))
-                    {
-                        StartMatch();
-                    }
-                    GUI.backgroundColor = Color.white;
-                }
-                else
-                {
-                    GUILayout.Space(4);
-                    GUILayout.BeginHorizontal();
-                    if (GUILayout.Button("Prep Phase", GUILayout.Height(24)))
-                    {
-                        SetMatchState(MatchState.PrepPhase);
-                    }
-                    if (GUILayout.Button("Combat", GUILayout.Height(24)))
-                    {
-                        SetMatchState(MatchState.CombatPhase);
-                    }
-                    GUILayout.EndHorizontal();
-
-                    if (GUILayout.Button("Reset to Lobby", GUILayout.Height(22)))
-                    {
-                        ResetToLobby();
-                    }
-                }
-            }
-            else
-            {
-                GUILayout.Label("<color=cyan>Waiting for Host to start...</color>");
-            }
-
-            GUILayout.EndArea();
-        }
 
         /// <summary>
         /// Debug / recovery helper to reset match back to WaitingForPlayers in Lobby.

@@ -5,17 +5,12 @@ using UnityEngine.SceneManagement;
 using HunterVsHider.Vision;
 using HunterVsHider.Player;
 
-[InitializeOnLoad]
 public class SetupTaskFoW
 {
-    static SetupTaskFoW()
-    {
-        EditorApplication.delayCall += ExecuteSetup;
-    }
-
     [MenuItem("Tools/Hunter v Hider/Setup 3-Tier Fog of War")]
     public static void ExecuteSetup()
     {
+        if (ParrelSync.ClonesManager.IsClone()) return;
         if (Application.isPlaying) return;
 
         Debug.Log("[SetupTaskFoW] Starting 3-Tier Fog of War Setup...");

@@ -6,8 +6,9 @@ using HunterVsHider.Managers;
 namespace HunterVsHider.Map
 {
     /// <summary>
-    /// Deterministic procedural map generator.
-    /// Generates local 3D obstacle geometry across clients from a synchronized integer seed.
+    /// Deterministic procedural tactical map generator.
+    /// Generates player-scaled rooms (6m–14m) and a dense web of variable-width corridors
+    /// (tight chokes 2–2.5m, standard 3–3.5m, open thoroughfares 4.5–6m) with thin 0.5-unit walls.
     /// Walls are strictly local geometry (no NetworkObject).
     /// </summary>
     public class MapGenerator : MonoBehaviour
@@ -15,26 +16,35 @@ namespace HunterVsHider.Map
         public static MapGenerator Instance { get; private set; }
 
         [Header("Prefab & Materials")]
-        [Tooltip("Optional custom prefab for wall blocks. If null, standard 3D primitive Cube is instantiated.")]
+        [Tooltip("Optional custom prefab for wall segments (Prefab_TacticalWall). If null, standard 3D primitive Cube is instantiated.")]
         public GameObject wallPrefab;
 
-        [Tooltip("Material applied to generated wall cubes.")]
+        [Tooltip("Material applied to generated wall segments (Mat_TacticalWall).")]
         public Material wallMaterial;
 
-        [Header("Grid Dimensions & Sizing")]
-        [Tooltip("Size of each grid cell in meters (standard 2m x 2m).")]
-        public float cellSize = 2f;
+        [Header("Player-Scale Room Constraints")]
+        [Tooltip("Minimum room width in meters (player-scale).")]
+        public float minRoomWidth = 6.0f;
 
-        [Tooltip("Height of the generated wall obstacles in meters.")]
-        public float wallHeight = 3f;
+        [Tooltip("Maximum room width in meters (player-scale).")]
+        public float maxRoomWidth = 14.0f;
 
-        [Tooltip("Target obstacle density (0.35 to 0.45 recommended for tactical cover).")]
-        [Range(0.2f, 0.6f)]
-        public float wallDensity = 0.42f;
+        [Tooltip("Minimum room height/depth in meters (player-scale).")]
+        public float minRoomHeight = 6.0f;
 
-        [Tooltip("Smoothing passes for cellular automata generation.")]
-        [Range(1, 6)]
-        public int smoothingIterations = 3;
+        [Tooltip("Maximum room height/depth in meters (player-scale).")]
+        public float maxRoomHeight = 14.0f;
+
+        [Header("Tactical Architectural Dimensions")]
+        [Tooltip("Standard thickness of all structural walls in meters (0.5m).")]
+        public float wallThickness = 0.5f;
+
+        [Tooltip("Height of generated walls in meters (3.0m).")]
+        public float wallHeight = 3.0f;
+
+        [Tooltip("Percentage of interior walls breached/removed for tactical looping paths (0.18 = 18%).")]
+        [Range(0.1f, 0.35f)]
+        public float punchThroughRatio = 0.18f;
 
         [Header("Hierarchy Organization")]
         [Tooltip("Container Transform under which all spawned walls are parented.")]
@@ -158,7 +168,13 @@ namespace HunterVsHider.Map
             {
                 if (obj == null) continue;
                 string objName = obj.name.ToLower();
-                if (objName.Contains("dummy") || objName.Contains("targetdummy") || objName.Contains("testdummy") || obj.CompareTag("Enemy"))
+                bool isPrototypeDummy = objName.Contains("dummy") || 
+                                       objName.Contains("targetdummy") || 
+                                       objName.Contains("testdummy") ||
+                                       objName.Contains("enemy_dummy") ||
+                                       objName.StartsWith("target_dummy");
+
+                if (isPrototypeDummy)
                 {
 #if UNITY_EDITOR
                     if (!Application.isPlaying)
@@ -172,6 +188,96 @@ namespace HunterVsHider.Map
             }
         }
 
+        private struct WallSegment
+        {
+            public Vector3 position;
+            public Vector3 size; // (sizeX, sizeY, sizeZ)
+
+            public WallSegment(Vector3 pos, Vector3 sz)
+            {
+                position = pos;
+                size = sz;
+            }
+        }
+
+        private class BSPNode
+        {
+            public Rect bounds;
+            public BSPNode left;
+            public BSPNode right;
+            public Rect room;
+            public float hallwayWidth;
+            public float hallwayHeight;
+
+            public bool IsLeaf => left == null && right == null;
+
+            public BSPNode(Rect b)
+            {
+                bounds = b;
+                left = null;
+                right = null;
+                room = Rect.zero;
+                hallwayWidth = 3.0f;
+                hallwayHeight = 3.0f;
+            }
+
+            public bool Split(System.Random prng, float minSize)
+            {
+                if (!IsLeaf) return false;
+
+                bool splitHorizontal;
+                if (bounds.width / bounds.height >= 1.25f)
+                    splitHorizontal = false; // Split vertically across X
+                else if (bounds.height / bounds.width >= 1.25f)
+                    splitHorizontal = true;  // Split horizontally across Z
+                else
+                    splitHorizontal = prng.NextDouble() > 0.5;
+
+                float maxSplit = (splitHorizontal ? bounds.height : bounds.width) - minSize;
+                if (maxSplit <= minSize) return false;
+
+                float split = (float)(minSize + prng.NextDouble() * (maxSplit - minSize));
+
+                if (splitHorizontal)
+                {
+                    left = new BSPNode(new Rect(bounds.x, bounds.y, bounds.width, split));
+                    right = new BSPNode(new Rect(bounds.x, bounds.y + split, bounds.width, bounds.height - split));
+                }
+                else
+                {
+                    left = new BSPNode(new Rect(bounds.x, bounds.y, split, bounds.height));
+                    right = new BSPNode(new Rect(bounds.x + split, bounds.y, bounds.width - split, bounds.height));
+                }
+
+                return true;
+            }
+        }
+
+        private float GetRandomHallwayWidth(System.Random prng)
+        {
+            double roll = prng.NextDouble();
+            if (roll < 0.25)
+            {
+                // 25% Tight Choke Points (2.0 to 2.5 units)
+                return 2.0f + (float)prng.NextDouble() * 0.5f;
+            }
+            else if (roll < 0.75)
+            {
+                // 50% Standard Corridors (3.0 to 3.5 units)
+                return 3.0f + (float)prng.NextDouble() * 0.5f;
+            }
+            else
+            {
+                // 25% Main Thoroughfares / Open Hallways (4.5 to 6.0 units)
+                return 4.5f + (float)prng.NextDouble() * 1.5f;
+            }
+        }
+
+        /// <summary>
+        /// Deterministically generates structured player-scaled rooms (6m–14m) and variable-width corridors
+        /// using deep BSP partitioning, unbroken outer boundary walls, and a tactical punch-through pass.
+        /// </summary>
+        /// <param name="seed">Synchronized random integer seed.</param>
         public void GenerateMap(int seed)
         {
             if (seed <= 0) return;
@@ -183,195 +289,302 @@ namespace HunterVsHider.Map
             currentGeneratedSeed = seed;
 
             int mapSize = (MatchManager.Singleton != null) ? MatchManager.Singleton.SelectedMapSize : 50;
-            Debug.Log($"[MapGenerator] Generating deterministic map -> Seed: {seed}, Size: {mapSize}x{mapSize}");
+            if (mapSize <= 0) mapSize = 50;
 
-            // Crucial: Use System.Random with seed for cross-client determinism
-            System.Random pseudoRandom = new System.Random(seed);
+            Debug.Log($"[MapGenerator] Generating player-scale BSP map -> Seed: {seed}, Size: {mapSize}x{mapSize}");
 
-            // Compute grid dimensions
-            int gridWidth = Mathf.RoundToInt(mapSize / cellSize);
-            int gridHeight = Mathf.RoundToInt(mapSize / cellSize);
+            System.Random prng = new System.Random(seed);
+            List<WallSegment> finalWalls = new List<WallSegment>();
 
-            if (gridWidth % 2 == 0) gridWidth++;
-            if (gridHeight % 2 == 0) gridHeight++;
+            float halfSize = mapSize * 0.5f;
+            float halfThick = wallThickness * 0.5f;
 
-            int[,] grid = GenerateGridData(gridWidth, gridHeight, pseudoRandom);
+            // =========================================================================
+            // 1. UNBROKEN OUTER BOUNDARY PERIMETER (GUARANTEED FOR ALL SIZES 50, 100, 250)
+            // =========================================================================
+            // North Boundary
+            finalWalls.Add(new WallSegment(
+                new Vector3(0f, wallHeight * 0.5f, halfSize - halfThick),
+                new Vector3(mapSize, wallHeight, wallThickness)
+            ));
+            // South Boundary
+            finalWalls.Add(new WallSegment(
+                new Vector3(0f, wallHeight * 0.5f, -halfSize + halfThick),
+                new Vector3(mapSize, wallHeight, wallThickness)
+            ));
+            // West Boundary
+            finalWalls.Add(new WallSegment(
+                new Vector3(-halfSize + halfThick, wallHeight * 0.5f, 0f),
+                new Vector3(wallThickness, wallHeight, mapSize - (wallThickness * 2f))
+            ));
+            // East Boundary
+            finalWalls.Add(new WallSegment(
+                new Vector3(halfSize - halfThick, wallHeight * 0.5f, 0f),
+                new Vector3(wallThickness, wallHeight, mapSize - (wallThickness * 2f))
+            ));
 
-            float halfWidth = (gridWidth * cellSize) * 0.5f;
-            float halfHeight = (gridHeight * cellSize) * 0.5f;
+            // =========================================================================
+            // 2. PLAYER-SCALE BSP PARTITIONING (DEEP SUBDIVISION UNTIL LEAVES <= 18M)
+            // =========================================================================
+            float activeMargin = 2.5f; // Margin inside boundary wall
+            Rect rootArea = new Rect(-halfSize + activeMargin, -halfSize + activeMargin, mapSize - (activeMargin * 2f), mapSize - (activeMargin * 2f));
+            BSPNode rootNode = new BSPNode(rootArea);
 
-            int wallLayer = LayerMask.NameToLayer("Obstacle");
-            if (wallLayer == -1) wallLayer = 0;
+            float minLeafSplit = minRoomWidth + 2.0f; // 8.0f minimum child size
+            float maxLeafAllowed = maxRoomWidth + 4.0f; // 18.0f max leaf before splitting
 
-            int wallCount = 0;
+            int maxDepth = (mapSize >= 200) ? 9 : ((mapSize >= 90) ? 7 : 5);
+            int currentDepth = 0;
+            bool didSplit = true;
 
-            for (int x = 0; x < gridWidth; x++)
+            while (didSplit && currentDepth < maxDepth)
             {
-                for (int z = 0; z < gridHeight; z++)
+                didSplit = false;
+                List<BSPNode> currentLeaves = new List<BSPNode>();
+                GetLeaves(rootNode, currentLeaves);
+
+                foreach (var node in currentLeaves)
                 {
-                    if (grid[x, z] == 1)
+                    if (node.IsLeaf)
                     {
-                        Vector3 worldPos = new Vector3(
-                            x * cellSize - halfWidth + (cellSize * 0.5f),
-                            wallHeight * 0.5f,
-                            z * cellSize - halfHeight + (cellSize * 0.5f)
-                        );
-
-                        // Clear spawn areas so players never spawn inside obstacles
-                        if (IsSpawnSafetyZone(worldPos, mapSize))
+                        if (node.bounds.width > maxLeafAllowed || node.bounds.height > maxLeafAllowed)
                         {
-                            continue;
-                        }
-
-                        GameObject wallObj;
-                        if (wallPrefab != null)
-                        {
-                            wallObj = Instantiate(wallPrefab, worldPos, Quaternion.identity, generatedEnvironment);
-                            wallObj.name = $"Wall_{x}_{z}";
-                            wallObj.transform.localScale = new Vector3(cellSize, wallHeight, cellSize);
-                        }
-                        else
-                        {
-                            wallObj = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                            wallObj.name = $"Wall_{x}_{z}";
-                            wallObj.transform.SetParent(generatedEnvironment, false);
-                            wallObj.transform.position = worldPos;
-                            wallObj.transform.localScale = new Vector3(cellSize, wallHeight, cellSize);
-
-                            if (wallMaterial != null)
+                            if (node.Split(prng, minLeafSplit))
                             {
-                                Renderer rend = wallObj.GetComponent<Renderer>();
-                                if (rend != null) rend.sharedMaterial = wallMaterial;
+                                didSplit = true;
                             }
                         }
-
-                        // Strict standard: Spawned walls MUST NOT have NetworkObject
-                        var netObj = wallObj.GetComponent<Unity.Netcode.NetworkObject>();
-                        if (netObj != null)
-                        {
-                            DestroyImmediate(netObj);
-                        }
-
-                        wallObj.layer = wallLayer;
-                        wallObj.tag = "Obstacle";
-
-                        wallCount++;
                     }
                 }
+                currentDepth++;
             }
 
-            Debug.Log($"[MapGenerator] Generated {wallCount} obstacle walls for seed {seed} ({mapSize}x{mapSize}).");
-        }
+            // =========================================================================
+            // 3. HUMAN-SCALE ROOMS & VARIABLE-WIDTH CORRIDORS
+            // =========================================================================
+            List<BSPNode> leaves = new List<BSPNode>();
+            GetLeaves(rootNode, leaves);
 
-        private int[,] GenerateGridData(int width, int height, System.Random prng)
-        {
-            int[,] map = new int[width, height];
+            List<WallSegment> rawInteriorWalls = new List<WallSegment>();
 
-            // 1. Initial random fill with borders
-            for (int x = 0; x < width; x++)
+            foreach (var leaf in leaves)
             {
-                for (int z = 0; z < height; z++)
+                // Dynamic variable hallway widths
+                float hallwayW = GetRandomHallwayWidth(prng);
+                float hallwayH = GetRandomHallwayWidth(prng);
+                leaf.hallwayWidth = hallwayW;
+                leaf.hallwayHeight = hallwayH;
+
+                // Player-scale room clamping (6.0m to 14.0m)
+                float roomWidth = Mathf.Clamp((float)(leaf.bounds.width - hallwayW), minRoomWidth, maxRoomWidth);
+                float roomHeight = Mathf.Clamp((float)(leaf.bounds.height - hallwayH), minRoomHeight, maxRoomHeight);
+
+                // Center room inside leaf bounds, preserving hallway clearances
+                float roomX = leaf.bounds.x + (leaf.bounds.width - roomWidth) * 0.5f;
+                float roomZ = leaf.bounds.y + (leaf.bounds.height - roomHeight) * 0.5f;
+
+                leaf.room = new Rect(roomX, roomZ, roomWidth, roomHeight);
+                Rect r = leaf.room;
+                if (r.width < minRoomWidth * 0.8f || r.height < minRoomHeight * 0.8f) continue;
+
+                // Doorway width scaled to corridor
+                float doorway = Mathf.Clamp(hallwayW * 0.9f, 2.5f, 3.5f);
+
+                // Add perimeter walls with doorways
+                AddHorizontalWallWithDoor(rawInteriorWalls, r.xMin, r.xMax, r.yMax, doorway, prng);
+                AddHorizontalWallWithDoor(rawInteriorWalls, r.xMin, r.xMax, r.yMin, doorway, prng);
+                AddVerticalWallWithDoor(rawInteriorWalls, r.xMin, r.yMin, r.yMax, doorway, prng);
+                AddVerticalWallWithDoor(rawInteriorWalls, r.xMax, r.yMin, r.yMax, doorway, prng);
+
+                // Small tactical column or half-wall in larger rooms (11m+)
+                if (r.width >= 11.0f && r.height >= 11.0f && prng.NextDouble() < 0.4)
                 {
-                    if (x == 0 || x == width - 1 || z == 0 || z == height - 1)
+                    float cx = r.center.x;
+                    float cz = r.center.y;
+                    float colLen = 2.5f;
+                    if (prng.NextDouble() > 0.5)
                     {
-                        map[x, z] = 1; // Perimeter border
+                        rawInteriorWalls.Add(new WallSegment(new Vector3(cx, wallHeight * 0.5f, cz), new Vector3(colLen, wallHeight, wallThickness)));
                     }
                     else
                     {
-                        map[x, z] = (prng.NextDouble() < wallDensity) ? 1 : 0;
+                        rawInteriorWalls.Add(new WallSegment(new Vector3(cx, wallHeight * 0.5f, cz), new Vector3(wallThickness, wallHeight, colLen)));
                     }
                 }
             }
 
-            // 2. Cellular Automata Smoothing Passes (4-5 rule)
-            for (int i = 0; i < smoothingIterations; i++)
+            // =========================================================================
+            // 4. SECONDARY PUNCH-THROUGH PASS (18% FOR NON-LINEAR TACTICAL LOOPS)
+            // =========================================================================
+            foreach (var wall in rawInteriorWalls)
             {
-                int[,] nextMap = new int[width, height];
-
-                for (int x = 0; x < width; x++)
+                // Safety zone filtering: Do not spawn walls inside spawn zones
+                if (IsSegmentInSafetyZone(wall, mapSize))
                 {
-                    for (int z = 0; z < height; z++)
-                    {
-                        if (x == 0 || x == width - 1 || z == 0 || z == height - 1)
-                        {
-                            nextMap[x, z] = 1;
-                        }
-                        else
-                        {
-                            int neighborWallCount = GetSurroundingWallCount(map, x, z, width, height);
+                    continue;
+                }
 
-                            if (neighborWallCount > 4)
-                                nextMap[x, z] = 1;
-                            else if (neighborWallCount < 4)
-                                nextMap[x, z] = 0;
+                // Random punch-through check
+                if (prng.NextDouble() < punchThroughRatio)
+                {
+                    // If wall is long (> 5m), punch a 3.0m breach hole in the middle (split into 2 pieces)
+                    float length = Mathf.Max(wall.size.x, wall.size.z);
+                    if (length > 5.0f)
+                    {
+                        float holeSize = 3.0f;
+                        float remaining = (length - holeSize) * 0.5f;
+                        if (remaining > 0.5f)
+                        {
+                            if (wall.size.x > wall.size.z)
+                            {
+                                // Horizontal wall
+                                float xOffset = (holeSize + remaining) * 0.5f;
+                                finalWalls.Add(new WallSegment(new Vector3(wall.position.x - xOffset, wall.position.y, wall.position.z), new Vector3(remaining, wallHeight, wallThickness)));
+                                finalWalls.Add(new WallSegment(new Vector3(wall.position.x + xOffset, wall.position.y, wall.position.z), new Vector3(remaining, wallHeight, wallThickness)));
+                            }
                             else
-                                nextMap[x, z] = map[x, z];
+                            {
+                                // Vertical wall
+                                float zOffset = (holeSize + remaining) * 0.5f;
+                                finalWalls.Add(new WallSegment(new Vector3(wall.position.x, wall.position.y, wall.position.z - zOffset), new Vector3(wallThickness, wallHeight, remaining)));
+                                finalWalls.Add(new WallSegment(new Vector3(wall.position.x, wall.position.y, wall.position.z + zOffset), new Vector3(wallThickness, wallHeight, remaining)));
+                            }
                         }
                     }
+                    // If wall is short (<= 5.0m), omit it completely to open up a corridor flank route!
+                    continue;
                 }
 
-                map = nextMap;
+                finalWalls.Add(wall);
             }
 
-            // 3. Carve central corridors to ensure navigability across quadrants
-            int midX = width / 2;
-            int midZ = height / 2;
+            // =========================================================================
+            // 5. INSTANTIATE WALL GEOMETRY (0.5M THICKNESS)
+            // =========================================================================
+            int spawnedCount = 0;
+            int obstacleLayer = LayerMask.NameToLayer("Obstacle");
+            if (obstacleLayer == -1) obstacleLayer = 7;
 
-            for (int x = 1; x < width - 1; x++)
+            foreach (var seg in finalWalls)
             {
-                map[x, midZ] = 0;
-                if (midZ + 1 < height - 1) map[x, midZ + 1] = 0;
-            }
-
-            for (int z = 1; z < height - 1; z++)
-            {
-                map[midX, z] = 0;
-                if (midX + 1 < width - 1) map[midX + 1, z] = 0;
-            }
-
-            return map;
-        }
-
-        private int GetSurroundingWallCount(int[,] map, int gridX, int gridY, int width, int height)
-        {
-            int wallCount = 0;
-            for (int neighbourX = gridX - 1; neighbourX <= gridX + 1; neighbourX++)
-            {
-                for (int neighbourY = gridY - 1; neighbourY <= gridY + 1; neighbourY++)
+                GameObject wallObj;
+                if (wallPrefab != null)
                 {
-                    if (neighbourX >= 0 && neighbourX < width && neighbourY >= 0 && neighbourY < height)
-                    {
-                        if (neighbourX != gridX || neighbourY != gridY)
-                        {
-                            wallCount += map[neighbourX, neighbourY];
-                        }
-                    }
-                    else
-                    {
-                        wallCount++;
-                    }
+                    wallObj = Instantiate(wallPrefab, seg.position, Quaternion.identity, generatedEnvironment);
                 }
+                else
+                {
+                    wallObj = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    wallObj.transform.SetParent(generatedEnvironment, false);
+                    wallObj.transform.position = seg.position;
+                    wallObj.transform.rotation = Quaternion.identity;
+                }
+
+                wallObj.name = $"TacticalWall_{spawnedCount:D3}";
+                wallObj.transform.localScale = seg.size;
+                wallObj.layer = obstacleLayer;
+                wallObj.tag = "Obstacle";
+
+                Renderer rend = wallObj.GetComponent<Renderer>();
+                if (rend != null)
+                {
+                    if (wallMaterial != null) rend.sharedMaterial = wallMaterial;
+                    rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.TwoSided;
+                    rend.receiveShadows = true;
+                }
+
+                BoxCollider col = wallObj.GetComponent<BoxCollider>();
+                if (col == null) col = wallObj.AddComponent<BoxCollider>();
+                col.enabled = true;
+
+                // Ensure NO NetworkObject
+                var netObj = wallObj.GetComponent<Unity.Netcode.NetworkObject>();
+                if (netObj != null) DestroyImmediate(netObj);
+
+                spawnedCount++;
             }
-            return wallCount;
+
+            Debug.Log($"[MapGenerator] Successfully generated {spawnedCount} structural walls (0.5m thick, player-scale 6m–14m rooms) for seed {seed} ({mapSize}x{mapSize}).");
         }
 
-        /// <summary>
-        /// Clears safety circles around spawn points (Center, North Spawn, South Spawn).
-        /// </summary>
-        private bool IsSpawnSafetyZone(Vector3 pos, int mapSize)
+        private void GetLeaves(BSPNode node, List<BSPNode> leaves)
         {
-            float distFromCenter = new Vector2(pos.x, pos.z).magnitude;
-            if (distFromCenter < 5.0f) return true;
+            if (node == null) return;
+            if (node.IsLeaf)
+            {
+                leaves.Add(node);
+            }
+            else
+            {
+                GetLeaves(node.left, leaves);
+                GetLeaves(node.right, leaves);
+            }
+        }
 
-            // North Spawn (Assassin Combat Spawn: Z = 18m or scaled)
+        private void AddHorizontalWallWithDoor(List<WallSegment> segments, float xMin, float xMax, float z, float doorWidth, System.Random prng)
+        {
+            float length = xMax - xMin;
+            if (length <= doorWidth + 1.2f)
+            {
+                segments.Add(new WallSegment(new Vector3((xMin + xMax) * 0.5f, wallHeight * 0.5f, z), new Vector3(length, wallHeight, wallThickness)));
+                return;
+            }
+
+            float doorStart = xMin + (length - doorWidth) * 0.5f;
+            float doorEnd = doorStart + doorWidth;
+
+            float leftLen = doorStart - xMin;
+            if (leftLen > 0.4f)
+            {
+                segments.Add(new WallSegment(new Vector3((xMin + doorStart) * 0.5f, wallHeight * 0.5f, z), new Vector3(leftLen, wallHeight, wallThickness)));
+            }
+
+            float rightLen = xMax - doorEnd;
+            if (rightLen > 0.4f)
+            {
+                segments.Add(new WallSegment(new Vector3((doorEnd + xMax) * 0.5f, wallHeight * 0.5f, z), new Vector3(rightLen, wallHeight, wallThickness)));
+            }
+        }
+
+        private void AddVerticalWallWithDoor(List<WallSegment> segments, float x, float zMin, float zMax, float doorWidth, System.Random prng)
+        {
+            float length = zMax - zMin;
+            if (length <= doorWidth + 1.2f)
+            {
+                segments.Add(new WallSegment(new Vector3(x, wallHeight * 0.5f, (zMin + zMax) * 0.5f), new Vector3(wallThickness, wallHeight, length)));
+                return;
+            }
+
+            float doorStart = zMin + (length - doorWidth) * 0.5f;
+            float doorEnd = doorStart + doorWidth;
+
+            float botLen = doorStart - zMin;
+            if (botLen > 0.4f)
+            {
+                segments.Add(new WallSegment(new Vector3(x, wallHeight * 0.5f, (zMin + doorStart) * 0.5f), new Vector3(wallThickness, wallHeight, botLen)));
+            }
+
+            float topLen = zMax - doorEnd;
+            if (topLen > 0.4f)
+            {
+                segments.Add(new WallSegment(new Vector3(x, wallHeight * 0.5f, (doorEnd + zMax) * 0.5f), new Vector3(wallThickness, wallHeight, topLen)));
+            }
+        }
+
+        private bool IsSegmentInSafetyZone(WallSegment seg, int mapSize)
+        {
+            Vector2 segPos = new Vector2(seg.position.x, seg.position.z);
+
+            // 1. Center Safety Zone (Radius 5m)
+            if (segPos.magnitude < 5.0f) return true;
+
+            // 2. North Spawn (Assassin Combat Spawn)
             float northZ = Mathf.Min(18f, (mapSize * 0.5f) - 6f);
-            float distFromNorth = new Vector2(pos.x, pos.z - northZ).magnitude;
-            if (distFromNorth < 6.0f) return true;
+            if (Vector2.Distance(segPos, new Vector2(0f, northZ)) < 5.5f) return true;
 
-            // South Spawn (Police Combat Spawn: Z = -18m or scaled)
+            // 3. South Spawn (Police Combat Spawn)
             float southZ = -Mathf.Min(18f, (mapSize * 0.5f) - 6f);
-            float distFromSouth = new Vector2(pos.x, pos.z - southZ).magnitude;
-            if (distFromSouth < 6.0f) return true;
+            if (Vector2.Distance(segPos, new Vector2(0f, southZ)) < 5.5f) return true;
 
             return false;
         }

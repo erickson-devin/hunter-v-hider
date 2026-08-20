@@ -8,17 +8,12 @@ using HunterVsHider.Map;
 
 namespace HunterVsHider.EditorScripts
 {
-    [InitializeOnLoad]
     public class SetupTaskScenePurgeAndTracking
     {
-        static SetupTaskScenePurgeAndTracking()
-        {
-            EditorApplication.delayCall += ExecuteSetup;
-        }
-
         [MenuItem("Tools/Hunter v Hider/Purge Scene, Normalize Fog Transform and Shadows")]
         public static void ExecuteSetup()
         {
+            if (ParrelSync.ClonesManager.IsClone()) return;
             if (Application.isPlaying) return;
 
             Debug.Log("[SetupTaskScenePurgeAndTracking] Starting Scene Purge, Fog Normalization, and Shadow Calibration...");

@@ -270,12 +270,6 @@ namespace HunterVsHider.Player
                 if (standardShader == null) standardShader = Shader.Find("Standard");
                 mat = new Material(standardShader);
                 mat.color = color;
-                #if UNITY_EDITOR
-                if (!Application.isPlaying)
-                {
-                    UnityEditor.AssetDatabase.CreateAsset(mat, path);
-                }
-                #endif
             }
             return mat;
         }
