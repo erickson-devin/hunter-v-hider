@@ -389,7 +389,7 @@ namespace HunterVsHider.Managers
         {
             if (dropdownMapSize == null || index < 0 || index >= dropdownMapSize.options.Count) return;
 
-            string selectedText = dropdownMapSize.options[index].text.Trim().Replace("x50", "").Replace("x100", "").Replace("x150", "").Replace("x250", "");
+            string selectedText = dropdownMapSize.options[index].text.Trim().Replace("x50", "").Replace("x100", "").Replace("x150", "");
             if (!int.TryParse(selectedText, out int size))
             {
                 switch (index)
@@ -411,7 +411,7 @@ namespace HunterVsHider.Managers
         private int GetDropdownIndexForSize(int size)
         {
             if (size == 100) return 1;
-            if (size == 150 || size == 250) return 2;
+            if (size == 150) return 2;
             return 0; // default 50
         }
 

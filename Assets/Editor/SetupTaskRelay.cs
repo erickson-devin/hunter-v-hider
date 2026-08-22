@@ -323,7 +323,7 @@ namespace HunterVsHider.Editor
             mapSizeLabelRt.offsetMax = new Vector2(0, 0);
 
             // Dropdown (Native TMP_Dropdown with valid Template hierarchy)
-            TMP_Dropdown mapSizeDropdown = SetupNativeTMPDropdown(mapSizeCardObj.transform, "Dropdown_MapSize", new System.Collections.Generic.List<string> { "50", "100", "250" });
+            TMP_Dropdown mapSizeDropdown = SetupNativeTMPDropdown(mapSizeCardObj.transform, "Dropdown_MapSize", new System.Collections.Generic.List<string> { "50", "100", "150" });
 
             // Connected Players Box
             GameObject playersCardObj = GetOrCreateChild(waitingObj, "ConnectedPlayersBox");

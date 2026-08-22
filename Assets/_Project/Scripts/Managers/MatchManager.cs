@@ -66,8 +66,9 @@ namespace HunterVsHider.Managers
 
         /// <summary>
         /// Server-only method to update the selected map size boundary.
+        /// Strictly clamped to 50 (Small), 100 (Medium), or 150 (Large).
         /// </summary>
-        /// <param name="newSize">Target map size (e.g. 50, 100, 150)</param>
+        /// <param name="newSize">Target map size (50, 100, or 150)</param>
         public void CmdSetMapSize(int newSize)
         {
             if (!IsServer)
@@ -76,8 +77,9 @@ namespace HunterVsHider.Managers
                 return;
             }
 
-            selectedMapSize.Value = newSize;
-            Debug.Log($"[MatchManager] Server updated selectedMapSize to: {newSize}x{newSize}");
+            int clampedSize = (newSize <= 75) ? 50 : ((newSize <= 125) ? 100 : 150);
+            selectedMapSize.Value = clampedSize;
+            Debug.Log($"[MatchManager] Server updated selectedMapSize to: {clampedSize}x{clampedSize}");
         }
 
         /// <summary>

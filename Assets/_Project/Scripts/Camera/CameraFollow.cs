@@ -64,7 +64,7 @@ namespace HunterVsHider.Cameras
         /// <summary>
         /// Activates the top-down 90-degree Sky View framing the entire arena grid for the Assassin.
         /// </summary>
-        /// <param name="mapSize">Grid dimension (e.g. 50, 100, 250)</param>
+        /// <param name="mapSize">Grid dimension (e.g. 50, 100, 150)</param>
         public void ActivateAssassinSkyView(int mapSize)
         {
             if (cam == null) cam = GetComponent<UnityEngine.Camera>();
