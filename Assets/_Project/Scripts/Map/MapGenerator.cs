@@ -244,19 +244,32 @@ namespace HunterVsHider.Map
             );
         }
 
+        public static int CompareWallSegmentsCanonical(WallSegment a, WallSegment b)
+        {
+            int aStartX = Mathf.RoundToInt(a.start.x * 1000f);
+            int bStartX = Mathf.RoundToInt(b.start.x * 1000f);
+            int cmp = aStartX.CompareTo(bStartX);
+            if (cmp != 0) return cmp;
+
+            int aStartZ = Mathf.RoundToInt(a.start.z * 1000f);
+            int bStartZ = Mathf.RoundToInt(b.start.z * 1000f);
+            cmp = aStartZ.CompareTo(bStartZ);
+            if (cmp != 0) return cmp;
+
+            int aEndX = Mathf.RoundToInt(a.end.x * 1000f);
+            int bEndX = Mathf.RoundToInt(b.end.x * 1000f);
+            cmp = aEndX.CompareTo(bEndX);
+            if (cmp != 0) return cmp;
+
+            int aEndZ = Mathf.RoundToInt(a.end.z * 1000f);
+            int bEndZ = Mathf.RoundToInt(b.end.z * 1000f);
+            return aEndZ.CompareTo(bEndZ);
+        }
+
         public static void SortWalls(List<WallSegment> walls)
         {
             if (walls == null) return;
-            walls.Sort((a, b) =>
-            {
-                int cmp = a.position.x.CompareTo(b.position.x);
-                if (cmp != 0) return cmp;
-                cmp = a.position.z.CompareTo(b.position.z);
-                if (cmp != 0) return cmp;
-                cmp = a.size.x.CompareTo(b.size.x);
-                if (cmp != 0) return cmp;
-                return a.size.z.CompareTo(b.size.z);
-            });
+            walls.Sort(CompareWallSegmentsCanonical);
         }
 
         public static void SortRooms(List<TacticalRoom> rooms)
@@ -295,6 +308,9 @@ namespace HunterVsHider.Map
         {
             public Vector3 position;
             public Vector3 size; // (sizeX, sizeY, sizeZ)
+
+            public Vector3 start => position - (size * 0.5f);
+            public Vector3 end => position + (size * 0.5f);
 
             public WallSegment(Vector3 pos, Vector3 sz)
             {

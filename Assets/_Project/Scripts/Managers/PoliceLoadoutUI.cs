@@ -15,9 +15,7 @@ namespace HunterVsHider.Managers
         public GameObject loadoutContainer;
 
         [Header("Weapon Selection Buttons")]
-        public Button buttonTacticalRifle;
-        public Button buttonOptic9mm;
-        public Button buttonSubCompact45;
+        public Button buttonGodTierArsenal;
 
         [Header("Squad Sync Panel")]
         [Tooltip("Parent container holding the squad member text elements.")]
@@ -54,13 +52,8 @@ namespace HunterVsHider.Managers
             // Ensure disabled by default on start
             SetUIActive(false);
 
-            // Hook up button listeners if assigned in inspector
-            if (buttonTacticalRifle != null)
-                buttonTacticalRifle.onClick.AddListener(() => OnSelectWeaponClicked(0));
-            if (buttonOptic9mm != null)
-                buttonOptic9mm.onClick.AddListener(() => OnSelectWeaponClicked(1));
-            if (buttonSubCompact45 != null)
-                buttonSubCompact45.onClick.AddListener(() => OnSelectWeaponClicked(2));
+            if (buttonGodTierArsenal != null)
+                buttonGodTierArsenal.onClick.AddListener(() => OnSelectGodTierArsenalClicked());
         }
 
         private void Update()
@@ -99,7 +92,6 @@ namespace HunterVsHider.Managers
             if (isOpen)
             {
                 UpdateSquadSync();
-                UpdateSelectionHighlights(localPlayer.SelectedWeaponID);
             }
         }
 
@@ -107,7 +99,6 @@ namespace HunterVsHider.Managers
         {
             isOpen = active;
 
-            // If loadoutContainer is a separate panel inside Canvas, toggle it; otherwise toggle gameObject
             if (loadoutContainer != null && loadoutContainer != gameObject)
             {
                 loadoutContainer.SetActive(active);
@@ -123,7 +114,6 @@ namespace HunterVsHider.Managers
                 }
                 else
                 {
-                    // If root canvas is toggled
                     var canvas = GetComponent<Canvas>();
                     if (canvas != null) canvas.enabled = active;
                 }
@@ -131,40 +121,22 @@ namespace HunterVsHider.Managers
 
             if (isOpen)
             {
-                PlayerNetworkState localPlayer = GetLocalPlayerState();
-                if (localPlayer != null)
-                {
-                    UpdateSelectionHighlights(localPlayer.SelectedWeaponID);
-                }
                 UpdateSquadSync();
             }
         }
 
-        public void OnSelectWeaponClicked(int weaponID)
+        public void OnSelectGodTierArsenalClicked()
         {
             PlayerNetworkState localPlayer = GetLocalPlayerState();
             if (localPlayer != null && localPlayer.IsOwner)
             {
-                localPlayer.CmdSelectWeapon(weaponID);
-                UpdateSelectionHighlights(weaponID);
+                var pwm = localPlayer.GetComponent<PlayerWeaponManager>();
+                if (pwm != null)
+                {
+                    pwm.SetupRoleLoadout(PlayerRole.Police);
+                }
+                localPlayer.CmdSelectWeapon(0);
                 UpdateSquadSync();
-            }
-        }
-
-        private void UpdateSelectionHighlights(int selectedID)
-        {
-            SetButtonColor(buttonTacticalRifle, selectedID == 0);
-            SetButtonColor(buttonOptic9mm, selectedID == 1);
-            SetButtonColor(buttonSubCompact45, selectedID == 2);
-        }
-
-        private void SetButtonColor(Button btn, bool isSelected)
-        {
-            if (btn == null) return;
-            var image = btn.GetComponent<Image>();
-            if (image != null)
-            {
-                image.color = isSelected ? selectedButtonColor : normalButtonColor;
             }
         }
 
@@ -199,37 +171,14 @@ namespace HunterVsHider.Managers
                     var officer = policeSquad[i];
                     string roleTag = officer.IsOwner ? " (You)" : "";
                     string clientTag = officer.OwnerClientId == 0 ? "Host" : $"Client {officer.OwnerClientId}";
-                    string weaponName = GetWeaponName(officer.SelectedWeaponID);
-                    string colorHex = GetWeaponColorHex(officer.SelectedWeaponID);
 
                     sb.AppendLine($"• <b>Officer {i + 1} [{clientTag}]{roleTag}</b>");
-                    sb.AppendLine($"   └ Weapon: <color={colorHex}><b>{weaponName}</b></color>");
+                    sb.AppendLine("   └ Arsenal: <color=#4DA6FF><b>God-Tier 3-Weapon Kit</b></color>");
+                    sb.AppendLine("      [1] Rifle (45°/24m) | [2] Shotgun (110°/10m) | [3] Pistol (75°/16m)");
                     if (i < policeSquad.Count - 1) sb.AppendLine();
                 }
 
                 squadSyncSummaryText.text = sb.ToString();
-            }
-        }
-
-        public static string GetWeaponName(int weaponID)
-        {
-            switch (weaponID)
-            {
-                case 0: return "Tactical Rifle";
-                case 1: return "Optic-Ready 9mm";
-                case 2: return "Sub-Compact .45";
-                default: return "Unknown Weapon";
-            }
-        }
-
-        public static string GetWeaponColorHex(int weaponID)
-        {
-            switch (weaponID)
-            {
-                case 0: return "#4DA6FF"; // Blue
-                case 1: return "#4DFF79"; // Green
-                case 2: return "#FF4D4D"; // Red
-                default: return "#FFFFFF";
             }
         }
 
@@ -249,8 +198,8 @@ namespace HunterVsHider.Managers
             PlayerNetworkState localPlayer = GetLocalPlayerState();
             if (localPlayer == null || localPlayer.Role != PlayerRole.Police) return;
 
-            int panelW = 580;
-            int panelH = 340;
+            int panelW = 620;
+            int panelH = 370;
             int x = (Screen.width - panelW) / 2;
             int y = (Screen.height - panelH) / 2;
 
@@ -265,51 +214,35 @@ namespace HunterVsHider.Managers
             }
             GUILayout.EndHorizontal();
 
-            GUILayout.Label("<color=#AAAAAA>Select your weapon profile. Your loadout synchronizes in real-time with your squad.</color>");
-            GUILayout.Space(10);
+            GUILayout.Label("<color=#AAAAAA>All officers are outfitted with the complete 3-Weapon Tactical Arsenal with Infinite Reserves.</color>");
+            GUILayout.Space(8);
 
             GUILayout.BeginHorizontal();
 
             // LEFT PANEL: Selection Panel
-            GUILayout.BeginVertical(GUI.skin.box, GUILayout.Width(270));
-            GUILayout.Label("<b>--- WEAPON PROFILES ---</b>");
+            GUILayout.BeginVertical(GUI.skin.box, GUILayout.Width(300));
+            GUILayout.Label("<b>--- ACTIVE POLICE ARSENAL ---</b>");
             GUILayout.Space(5);
 
-            int currentSelected = localPlayer.SelectedWeaponID;
-
-            // Option 0: Tactical Rifle
-            GUI.backgroundColor = (currentSelected == 0) ? new Color(0.2f, 0.6f, 1.0f) : Color.white;
-            if (GUILayout.Button($"<b>Tactical Rifle [0]</b>\n<size=10>Range 50m | DMG 25 | Full-Auto (Blue)</size>", GUILayout.Height(46)))
+            GUI.backgroundColor = new Color(0.2f, 0.6f, 1.0f);
+            if (GUILayout.Button("<b>[★] GOD-TIER 3-WEAPON ARSENAL</b>\n<size=10>Full Loadout Enabled (Infinite Reserves)</size>", GUILayout.Height(42)))
             {
-                OnSelectWeaponClicked(0);
+                OnSelectGodTierArsenalClicked();
             }
-
-            GUILayout.Space(4);
-
-            // Option 1: Optic-Ready 9mm
-            GUI.backgroundColor = (currentSelected == 1) ? new Color(0.2f, 0.9f, 0.3f) : Color.white;
-            if (GUILayout.Button($"<b>Optic-Ready 9mm [1]</b>\n<size=10>Range 35m | DMG 20 | Semi-Auto (Green)</size>", GUILayout.Height(46)))
-            {
-                OnSelectWeaponClicked(1);
-            }
-
-            GUILayout.Space(4);
-
-            // Option 2: Sub-Compact .45
-            GUI.backgroundColor = (currentSelected == 2) ? new Color(1.0f, 0.3f, 0.3f) : Color.white;
-            if (GUILayout.Button($"<b>Sub-Compact .45 [2]</b>\n<size=10>Range 20m | DMG 35 | High-Impact (Red)</size>", GUILayout.Height(46)))
-            {
-                OnSelectWeaponClicked(2);
-            }
-
             GUI.backgroundColor = Color.white;
+
+            GUILayout.Space(5);
+            GUILayout.Label("<b>[Key 1] Tactical Rifle</b>\n<size=10><color=#4DA6FF>45° Narrow Beam | 24m Range | 30 Rds</color></size>");
+            GUILayout.Label("<b>[Key 2] Combat Shotgun</b>\n<size=10><color=#4DFF79>110° Floodlight | 10m CQC | 8 Pellets | 8 Rds</color></size>");
+            GUILayout.Label("<b>[Key 3] Pistol</b>\n<size=10><color=#FF4D4D>75° Tactical Cone | 16m Beam | 15 Rds</color></size>");
+
             GUILayout.EndVertical();
 
             GUILayout.Space(10);
 
             // RIGHT PANEL: Squad Sync Panel
-            GUILayout.BeginVertical(GUI.skin.box, GUILayout.Width(270));
-            GUILayout.Label("<b>--- SQUAD LOADOUT SYNC ---</b>");
+            GUILayout.BeginVertical(GUI.skin.box, GUILayout.Width(280));
+            GUILayout.Label("<b>--- SQUAD ARSENAL SYNC ---</b>");
             GUILayout.Space(5);
 
             if (NetworkManager.Singleton != null)
@@ -324,10 +257,8 @@ namespace HunterVsHider.Managers
 
                     string youTag = pState.IsOwner ? " <color=yellow>(You)</color>" : "";
                     string clientTag = pState.OwnerClientId == 0 ? "Host" : $"Client {pState.OwnerClientId}";
-                    string wName = GetWeaponName(pState.SelectedWeaponID);
-                    string colorHex = GetWeaponColorHex(pState.SelectedWeaponID);
 
-                    GUILayout.Label($"<b>Officer {officerNum} [{clientTag}]{youTag}</b>\n   └ <color={colorHex}><b>{wName}</b></color>");
+                    GUILayout.Label($"<b>Officer {officerNum} [{clientTag}]{youTag}</b>\n   └ <color=#4DA6FF><b>God-Tier 3-Weapon Kit</b></color>\n   <size=10>Rifle + Shotgun + Pistol (Inf Reserves)</size>");
                     officerNum++;
                 }
             }
@@ -336,7 +267,7 @@ namespace HunterVsHider.Managers
 
             GUILayout.EndHorizontal();
 
-            GUILayout.Space(10);
+            GUILayout.Space(8);
             GUILayout.Label("<color=#7799BB><size=11>Press [TAB] at any time during Prep Phase to toggle this Armory menu.</size></color>");
 
             GUILayout.EndArea();

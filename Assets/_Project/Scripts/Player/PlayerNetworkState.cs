@@ -186,6 +186,12 @@ namespace HunterVsHider.Player
         {
             Debug.Log($"[PlayerNetworkState] OwnerClientId {OwnerClientId} Role changed from {previousRole} to {newRole} (IsLocalPlayer: {IsLocalPlayer}, IsServer: {IsServer})");
             
+            var weaponMgr = GetComponent<PlayerWeaponManager>();
+            if (weaponMgr != null)
+            {
+                weaponMgr.SetupRoleLoadout(newRole);
+            }
+
             // Re-apply vision settings when role updates
             if (IsOwner)
             {
@@ -262,31 +268,51 @@ namespace HunterVsHider.Player
             MeshRenderer renderer = visualBlock.GetComponent<MeshRenderer>();
             Material mat = null;
 
-            switch (weaponID)
+            if (Role == PlayerRole.Assassin)
             {
-                case 0: // Tactical Rifle (Blue Long Box)
-                    visualBlock.localPosition = new Vector3(0.3f, 0.0f, 0.6f);
-                    visualBlock.localScale = new Vector3(0.18f, 0.18f, 1.2f);
-                    mat = GetOrCreateColorMaterial("Mat_Weapon_Blue", new Color(0.15f, 0.45f, 1.0f));
-                    break;
-
-                case 1: // Optic-Ready 9mm (Green Short Box)
-                    visualBlock.localPosition = new Vector3(0.3f, 0.0f, 0.38f);
-                    visualBlock.localScale = new Vector3(0.15f, 0.18f, 0.55f);
-                    mat = GetOrCreateColorMaterial("Mat_Weapon_Green", new Color(0.15f, 0.85f, 0.25f));
-                    break;
-
-                case 2: // Sub-Compact .45 (Red Short Box)
+                if (weaponID == 0)
+                {
+                    // Slash Knife (Silver Blade)
+                    visualBlock.localPosition = new Vector3(0.3f, 0.0f, 0.35f);
+                    visualBlock.localScale = new Vector3(0.08f, 0.15f, 0.5f);
+                    mat = GetOrCreateColorMaterial("Mat_Weapon_Silver", new Color(0.85f, 0.85f, 0.9f));
+                }
+                else
+                {
+                    // Throwing Knives (Dark Knife)
                     visualBlock.localPosition = new Vector3(0.3f, 0.0f, 0.28f);
-                    visualBlock.localScale = new Vector3(0.13f, 0.13f, 0.32f);
-                    mat = GetOrCreateColorMaterial("Mat_Weapon_Red", new Color(0.95f, 0.2f, 0.2f));
-                    break;
+                    visualBlock.localScale = new Vector3(0.06f, 0.1f, 0.35f);
+                    mat = GetOrCreateColorMaterial("Mat_Weapon_Dark", new Color(0.2f, 0.2f, 0.25f));
+                }
+            }
+            else
+            {
+                switch (weaponID)
+                {
+                    case 0: // Tactical Rifle (Blue Long Box)
+                        visualBlock.localPosition = new Vector3(0.3f, 0.0f, 0.6f);
+                        visualBlock.localScale = new Vector3(0.18f, 0.18f, 1.2f);
+                        mat = GetOrCreateColorMaterial("Mat_Weapon_Blue", new Color(0.15f, 0.45f, 1.0f));
+                        break;
 
-                default:
-                    visualBlock.localPosition = new Vector3(0.3f, 0.0f, 0.5f);
-                    visualBlock.localScale = new Vector3(0.15f, 0.15f, 0.5f);
-                    mat = GetOrCreateColorMaterial("Mat_Weapon_Blue", new Color(0.15f, 0.45f, 1.0f));
-                    break;
+                    case 1: // Combat Shotgun (Heavy Green Box)
+                        visualBlock.localPosition = new Vector3(0.3f, 0.0f, 0.5f);
+                        visualBlock.localScale = new Vector3(0.22f, 0.20f, 0.9f);
+                        mat = GetOrCreateColorMaterial("Mat_Weapon_Green", new Color(0.15f, 0.85f, 0.25f));
+                        break;
+
+                    case 2: // Pistol (Red Short Box)
+                        visualBlock.localPosition = new Vector3(0.3f, 0.0f, 0.28f);
+                        visualBlock.localScale = new Vector3(0.13f, 0.13f, 0.32f);
+                        mat = GetOrCreateColorMaterial("Mat_Weapon_Red", new Color(0.95f, 0.2f, 0.2f));
+                        break;
+
+                    default:
+                        visualBlock.localPosition = new Vector3(0.3f, 0.0f, 0.5f);
+                        visualBlock.localScale = new Vector3(0.15f, 0.15f, 0.5f);
+                        mat = GetOrCreateColorMaterial("Mat_Weapon_Blue", new Color(0.15f, 0.45f, 1.0f));
+                        break;
+                }
             }
 
             if (renderer != null && mat != null)

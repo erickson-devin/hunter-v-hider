@@ -88,6 +88,19 @@ namespace HunterVsHider.Vision
             }
         }
 
+        private float targetViewAngle = 90f;
+        private float targetViewRadius = 15f;
+        private float visionTransitionSpeed = 5f;
+        private bool isTransitioningVision = false;
+
+        public void UpdateWeaponVisionProfile(float targetAngle, float targetDistance, float transitionDuration = 0.2f)
+        {
+            targetViewAngle = targetAngle;
+            targetViewRadius = targetDistance;
+            visionTransitionSpeed = (transitionDuration > 0.001f) ? (1f / transitionDuration) : 100f;
+            isTransitioningVision = true;
+        }
+
         public void SetRoleFOV(Player.PlayerRole role)
         {
             if (role == Player.PlayerRole.Police)
@@ -96,6 +109,8 @@ namespace HunterVsHider.Vision
                 viewRadius = 15f;
                 proximityRadius = 2.5f;
                 rayCount = 240;
+                targetViewAngle = 90f;
+                targetViewRadius = 15f;
             }
             else if (role == Player.PlayerRole.Assassin)
             {
@@ -103,6 +118,8 @@ namespace HunterVsHider.Vision
                 viewRadius = 12f;
                 proximityRadius = 12f;
                 rayCount = 240;
+                targetViewAngle = 360f;
+                targetViewRadius = 12f;
             }
         }
 
@@ -111,6 +128,27 @@ namespace HunterVsHider.Vision
             if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening && !IsOwner)
             {
                 return;
+            }
+
+            if (isTransitioningVision)
+            {
+                viewAngle = Mathf.MoveTowards(viewAngle, targetViewAngle, Mathf.Abs(targetViewAngle - viewAngle) * visionTransitionSpeed * Time.deltaTime + 10f * Time.deltaTime);
+                viewRadius = Mathf.MoveTowards(viewRadius, targetViewRadius, Mathf.Abs(targetViewRadius - viewRadius) * visionTransitionSpeed * Time.deltaTime + 2f * Time.deltaTime);
+
+                if (Mathf.Abs(viewAngle - targetViewAngle) < 0.1f && Mathf.Abs(viewRadius - targetViewRadius) < 0.1f)
+                {
+                    viewAngle = targetViewAngle;
+                    viewRadius = targetViewRadius;
+                    isTransitioningVision = false;
+                }
+
+                // Update attached or child Light if present
+                var lightComp = GetComponentInChildren<Light>();
+                if (lightComp != null && lightComp.type == LightType.Spot)
+                {
+                    lightComp.spotAngle = viewAngle;
+                    lightComp.range = viewRadius;
+                }
             }
 
             DynamicFog.Instance?.UpdatePlayerTracking(transform);
