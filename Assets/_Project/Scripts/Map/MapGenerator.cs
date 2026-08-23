@@ -71,12 +71,37 @@ namespace HunterVsHider.Map
             EnsureContainer();
         }
 
+        private void OnEnable()
+        {
+            EnsureContainer();
+
+            if (MatchManager.Instance != null)
+            {
+                MatchManager.Instance.OnMapSeedReceived -= HandleMapSeedReceived;
+                MatchManager.Instance.OnMapSeedReceived += HandleMapSeedReceived;
+
+                if (MatchManager.Instance.MapGenerationSeed > 0)
+                {
+                    GenerateMap(MatchManager.Instance.MapGenerationSeed);
+                }
+            }
+        }
+
+        private void OnDisable()
+        {
+            if (MatchManager.Instance != null)
+            {
+                MatchManager.Instance.OnMapSeedReceived -= HandleMapSeedReceived;
+            }
+        }
+
         private void Start()
         {
             EnsureContainer();
 
             if (MatchManager.Instance != null)
             {
+                MatchManager.Instance.OnMapSeedReceived -= HandleMapSeedReceived;
                 MatchManager.Instance.OnMapSeedReceived += HandleMapSeedReceived;
 
                 if (MatchManager.Instance.MapGenerationSeed > 0)
@@ -195,7 +220,72 @@ namespace HunterVsHider.Map
             }
         }
 
-        #region Internal Data Structures
+        #region Internal Data Structures & Quantization Helpers
+
+        public static float Quantize(float val)
+        {
+            return Mathf.Round(val * 10f) / 10f;
+        }
+
+        public static Vector2 QuantizeVector2(Vector2 v)
+        {
+            return new Vector2(
+                Mathf.Round(v.x * 10f) / 10f,
+                Mathf.Round(v.y * 10f) / 10f
+            );
+        }
+
+        public static Vector3 QuantizeVector(Vector3 v)
+        {
+            return new Vector3(
+                Mathf.Round(v.x * 10f) / 10f,
+                Mathf.Round(v.y * 10f) / 10f,
+                Mathf.Round(v.z * 10f) / 10f
+            );
+        }
+
+        public static void SortWalls(List<WallSegment> walls)
+        {
+            if (walls == null) return;
+            walls.Sort((a, b) =>
+            {
+                int cmp = a.position.x.CompareTo(b.position.x);
+                if (cmp != 0) return cmp;
+                cmp = a.position.z.CompareTo(b.position.z);
+                if (cmp != 0) return cmp;
+                cmp = a.size.x.CompareTo(b.size.x);
+                if (cmp != 0) return cmp;
+                return a.size.z.CompareTo(b.size.z);
+            });
+        }
+
+        public static void SortRooms(List<TacticalRoom> rooms)
+        {
+            if (rooms == null) return;
+            rooms.Sort((a, b) =>
+            {
+                int cmp = a.bounds.xMin.CompareTo(b.bounds.xMin);
+                if (cmp != 0) return cmp;
+                cmp = a.bounds.yMin.CompareTo(b.bounds.yMin);
+                if (cmp != 0) return cmp;
+                return a.id.CompareTo(b.id);
+            });
+        }
+
+        public static void SortSharedBoundaries(List<SharedWallBoundary> boundaries)
+        {
+            if (boundaries == null) return;
+            boundaries.Sort((a, b) =>
+            {
+                int cmp = a.roomA.id.CompareTo(b.roomA.id);
+                if (cmp != 0) return cmp;
+                cmp = a.roomB.id.CompareTo(b.roomB.id);
+                if (cmp != 0) return cmp;
+                cmp = a.overlapMin.CompareTo(b.overlapMin);
+                if (cmp != 0) return cmp;
+                return a.fixedCoord.CompareTo(b.fixedCoord);
+            });
+        }
 
         public enum WallFacing { North, South, East, West }
 
@@ -208,8 +298,8 @@ namespace HunterVsHider.Map
 
             public WallSegment(Vector3 pos, Vector3 sz)
             {
-                position = pos;
-                size = sz;
+                position = QuantizeVector(pos);
+                size = QuantizeVector(sz);
             }
         }
 
@@ -222,8 +312,8 @@ namespace HunterVsHider.Map
             public Doorway(WallFacing f, Vector2 center, float w)
             {
                 facing = f;
-                centerPos = center;
-                width = w;
+                centerPos = QuantizeVector2(center);
+                width = Quantize(w);
             }
         }
 
@@ -253,7 +343,7 @@ namespace HunterVsHider.Map
             public TacticalRoom(int roomId, Rect b)
             {
                 id = roomId;
-                bounds = b;
+                bounds = new Rect(Quantize(b.x), Quantize(b.y), Quantize(b.width), Quantize(b.height));
             }
         }
 
@@ -329,17 +419,25 @@ namespace HunterVsHider.Map
             // PASS 1: RANDOMIZED ROOM PACKING (DUAL PLACEMENT: CORRIDOR-BUFFERED & ADJACENT SUITES)
             // =========================================================================
             List<TacticalRoom> rooms = PackScatteredRooms(mapSize, prng);
+            SortRooms(rooms);
 
             // =========================================================================
             // PASS 2: IDENTIFY SHARED BOUNDARIES & CARVE PROPORTIONAL DOORWAYS
             // =========================================================================
             List<SharedWallBoundary> sharedBoundaries = FindSharedWallBoundaries(rooms);
+            SortSharedBoundaries(sharedBoundaries);
+
             CarveProportionalDoorways(rooms, sharedBoundaries, mapSize, prng);
 
             // =========================================================================
             // PASS 3: CONSTRUCT ROOM WALLS & INTERNAL COVER MATRICES
             // =========================================================================
+            SortRooms(rooms);
+            SortSharedBoundaries(sharedBoundaries);
+            SortWalls(rawWalls);
+
             ConstructRoomWalls(rooms, sharedBoundaries, rawWalls, prng);
+            SortWalls(rawWalls);
 
             // =========================================================================
             // PASS 3.5: POST-PROCESSING CORRIDOR WEB & ROOM CLUSTER LINKING (100x100 & 150x150)
@@ -347,13 +445,19 @@ namespace HunterVsHider.Map
             LastInjectedCorridorWallCount = 0;
             if (mapSize >= 100)
             {
+                SortRooms(rooms);
+                SortWalls(rawWalls);
                 InjectCorridorWebs(mapSize, rooms, rawWalls, prng);
+                SortWalls(rawWalls);
             }
 
             // =========================================================================
             // PASS 4: 2D GRID FLOOD-FILL (BFS) CONNECTIVITY VALIDATION & AUTO-REMEDIATION
             // =========================================================================
+            SortRooms(rooms);
+            SortWalls(rawWalls);
             ValidateAndRemediateMapConnectivity(mapSize, rawWalls, rooms);
+            SortWalls(rawWalls);
 
             LastGeneratedRooms = rooms;
             LastGeneratedSharedBoundaries = sharedBoundaries;
@@ -362,6 +466,7 @@ namespace HunterVsHider.Map
             // PASS 5: MONOLITHIC COLLINEAR COLLIDER MERGING & INSTANTIATION
             // =========================================================================
             List<WallSegment> mergedWalls = MergeCollinearWallSegments(rawWalls, mapSize);
+            SortWalls(mergedWalls);
 
             InstantiateWallGeometry(mergedWalls, seed, mapSize, rooms.Count);
         }
@@ -527,6 +632,9 @@ namespace HunterVsHider.Map
                 }
             }
 
+            // Strictly sort rooms by ID to enforce 100% deterministic iteration order across processes
+            rooms.Sort((a, b) => a.id.CompareTo(b.id));
+
             Debug.Log($"[MapGenerator] Room Packing Complete: Packed {rooms.Count} rooms across {mapSize}x{mapSize}m arena ({adjacentChance:P0} suite placement probability).");
             return rooms;
         }
@@ -599,6 +707,9 @@ namespace HunterVsHider.Map
                     depth = 6.5f + (float)prng.NextDouble() * 6.5f;  // 6.5m - 13.0m
                 }
             }
+
+            width = Quantize(width);
+            depth = Quantize(depth);
         }
 
         #endregion
@@ -679,6 +790,14 @@ namespace HunterVsHider.Map
                     }
                 }
             }
+
+            // Strictly sort shared boundaries by member room IDs for deterministic processing
+            sharedList.Sort((a, b) =>
+            {
+                int cmp = a.roomA.id.CompareTo(b.roomA.id);
+                if (cmp != 0) return cmp;
+                return a.roomB.id.CompareTo(b.roomB.id);
+            });
 
             return sharedList;
         }
@@ -1599,10 +1718,14 @@ namespace HunterVsHider.Map
                 }
             }
 
-            foreach (var kvp in horizontalLines)
+            // Deterministically sort horizontal keys before merging
+            List<int> sortedHorizontalKeys = new List<int>(horizontalLines.Keys);
+            sortedHorizontalKeys.Sort();
+
+            foreach (int keyZ in sortedHorizontalKeys)
             {
-                float z = kvp.Key / quantizeFactor;
-                List<Vector2> spans = kvp.Value;
+                float z = keyZ / quantizeFactor;
+                List<Vector2> spans = horizontalLines[keyZ];
                 spans.Sort((a, b) => a.x.CompareTo(b.x));
                 List<Vector2> mergedSpans = new List<Vector2>();
                 foreach (var span in spans)
@@ -1622,10 +1745,14 @@ namespace HunterVsHider.Map
                 }
             }
 
-            foreach (var kvp in verticalLines)
+            // Deterministically sort vertical keys before merging
+            List<int> sortedVerticalKeys = new List<int>(verticalLines.Keys);
+            sortedVerticalKeys.Sort();
+
+            foreach (int keyX in sortedVerticalKeys)
             {
-                float x = kvp.Key / quantizeFactor;
-                List<Vector2> spans = kvp.Value;
+                float x = keyX / quantizeFactor;
+                List<Vector2> spans = verticalLines[keyX];
                 spans.Sort((a, b) => a.x.CompareTo(b.x));
                 List<Vector2> mergedSpans = new List<Vector2>();
                 foreach (var span in spans)
@@ -1644,6 +1771,19 @@ namespace HunterVsHider.Map
                     if (len > 0.3f) merged.Add(new WallSegment(new Vector3(x, wallHeight * 0.5f, (span.x + span.y) * 0.5f), new Vector3(wallThickness, wallHeight, len)));
                 }
             }
+
+            // Final deterministic sorting: Guarantee 100% identical element ordering across processes
+            merged.Sort((a, b) =>
+            {
+                int cmp = a.position.x.CompareTo(b.position.x);
+                if (cmp != 0) return cmp;
+                cmp = a.position.z.CompareTo(b.position.z);
+                if (cmp != 0) return cmp;
+                cmp = a.size.x.CompareTo(b.size.x);
+                if (cmp != 0) return cmp;
+                return a.size.z.CompareTo(b.size.z);
+            });
+
             return merged;
         }
 

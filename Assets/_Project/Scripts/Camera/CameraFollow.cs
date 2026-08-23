@@ -4,7 +4,7 @@ namespace HunterVsHider.Cameras
 {
     /// <summary>
     /// Controls the local player's camera view.
-    /// Supports standard 60-degree tactical follow and full-map 90-degree Assassin sky view.
+    /// Supports standard 60-degree tactical follow and full-map 90-degree Assassin God-View with WASD panning.
     /// </summary>
     public class CameraFollow : MonoBehaviour
     {
@@ -16,14 +16,18 @@ namespace HunterVsHider.Cameras
         public float pitch = 60f;
         public float transitionSpeed = 8f;
 
-        [Header("Sky Camera Mode (Read-Only)")]
+        [Header("God-View Camera Mode (Assassin Prep)")]
         [SerializeField] private bool isSkyViewActive = false;
         [SerializeField] private Vector3 targetSkyPosition;
         [SerializeField] private Quaternion targetSkyRotation;
+        public float godViewPanSpeed = 30f;
 
         public bool IsSkyViewActive => isSkyViewActive;
 
         private UnityEngine.Camera cam;
+        private Vector3 godViewPanOffset = Vector3.zero;
+        private int currentMapSize = 50;
+        private float currentRequiredHeight = 35f;
 
         private void Awake()
         {
@@ -31,11 +35,34 @@ namespace HunterVsHider.Cameras
             if (cam == null) cam = UnityEngine.Camera.main;
         }
 
+        private void Update()
+        {
+            if (isSkyViewActive)
+            {
+                // Handle WASD / Arrow Keys camera panning across active map bounds
+                float h = Input.GetAxisRaw("Horizontal");
+                float v = Input.GetAxisRaw("Vertical");
+
+                Vector3 panDir = new Vector3(h, 0f, v);
+                if (panDir.sqrMagnitude > 0.01f)
+                {
+                    godViewPanOffset += panDir.normalized * godViewPanSpeed * Time.deltaTime;
+                }
+
+                // Clamp panning within map boundaries (with a small edge buffer)
+                float maxPan = Mathf.Max(10f, currentMapSize * 0.5f);
+                godViewPanOffset.x = Mathf.Clamp(godViewPanOffset.x, -maxPan, maxPan);
+                godViewPanOffset.z = Mathf.Clamp(godViewPanOffset.z, -maxPan, maxPan);
+
+                targetSkyPosition = new Vector3(godViewPanOffset.x, currentRequiredHeight, godViewPanOffset.z);
+            }
+        }
+
         private void LateUpdate()
         {
             if (isSkyViewActive)
             {
-                // Smoothly lerp position and rotation into Assassin full-grid Sky View
+                // Smoothly lerp position and rotation into Assassin God-View
                 transform.position = Vector3.Lerp(transform.position, targetSkyPosition, transitionSpeed * Time.deltaTime);
                 transform.rotation = Quaternion.Slerp(transform.rotation, targetSkyRotation, transitionSpeed * Time.deltaTime);
             }
@@ -50,7 +77,7 @@ namespace HunterVsHider.Cameras
         }
 
         /// <summary>
-        /// Activates the top-down 90-degree Sky View framing the entire arena grid for the Assassin.
+        /// Activates the top-down 90-degree God-View framing the arena grid for the Assassin.
         /// Uses MatchManager.Singleton.selectedMapSize.Value dynamically.
         /// </summary>
         public void ActivateAssassinSkyView()
@@ -58,38 +85,40 @@ namespace HunterVsHider.Cameras
             int mapSize = (HunterVsHider.Managers.MatchManager.Singleton != null)
                 ? HunterVsHider.Managers.MatchManager.Singleton.selectedMapSize.Value
                 : 50;
-            ActivateAssassinSkyView(mapSize);
+            ActivateAssassinGodView(mapSize);
         }
 
         /// <summary>
-        /// Activates the top-down 90-degree Sky View framing the entire arena grid for the Assassin.
+        /// Activates the top-down 90-degree God-View framing the arena grid with WASD panning support.
         /// </summary>
-        /// <param name="mapSize">Grid dimension (e.g. 50, 100, 150)</param>
-        public void ActivateAssassinSkyView(int mapSize)
+        /// <param name="mapSize">Grid dimension (50, 100, 150)</param>
+        public void ActivateAssassinGodView(int mapSize)
         {
+            currentMapSize = mapSize;
             if (cam == null) cam = GetComponent<UnityEngine.Camera>();
             if (cam == null) cam = UnityEngine.Camera.main;
 
             float fov = (cam != null) ? cam.fieldOfView : 60f;
             float aspect = (cam != null && cam.aspect > 0.01f) ? cam.aspect : (16f / 9f);
 
-            // Compute dynamic height to fit both width and height within camera frustum
+            // Compute dynamic height to fit arena or provide optimal overhead perspective
             float halfMap = mapSize * 0.5f;
             float tanHalfFov = Mathf.Tan(fov * 0.5f * Mathf.Deg2Rad);
 
             float verticalDist = halfMap / tanHalfFov;
             float horizontalDist = halfMap / (aspect * tanHalfFov);
 
-            // Include a 10% safety margin around the grid edges
-            float requiredHeight = Mathf.Max(verticalDist, horizontalDist) * 1.10f;
+            // Set camera height scaled to map size (minimum 25m)
+            currentRequiredHeight = Mathf.Max(25f, Mathf.Max(verticalDist, horizontalDist) * 1.05f);
 
             if (cam != null && cam.orthographic)
             {
-                cam.orthographicSize = halfMap * 1.10f;
+                cam.orthographicSize = halfMap * 1.05f;
             }
 
-            // Snap camera directly to center of Zone_CombatArena (X=0, Z=0) looking straight down (X=90, Y=0, Z=0)
-            Vector3 skyPos = new Vector3(0f, requiredHeight, 0f);
+            godViewPanOffset = Vector3.zero;
+
+            Vector3 skyPos = new Vector3(0f, currentRequiredHeight, 0f);
             Quaternion skyRot = Quaternion.Euler(90f, 0f, 0f);
 
             transform.position = skyPos;
@@ -99,18 +128,27 @@ namespace HunterVsHider.Cameras
             targetSkyRotation = skyRot;
             isSkyViewActive = true;
 
-            Debug.Log($"[CameraFollow] Activated Assassin Sky View -> MapSize: {mapSize}x{mapSize}, Snapped to: {skyPos}, Rotation: (90, 0, 0)");
+            Debug.Log($"[CameraFollow] Activated Assassin God-View -> MapSize: {mapSize}x{mapSize}, Height: {currentRequiredHeight:F1}m, WASD Pan Active.");
         }
+
+        public void ActivateAssassinSkyView(int mapSize) => ActivateAssassinGodView(mapSize);
 
         /// <summary>
         /// Resets the camera back to the standard 60-degree tactical follow view.
         /// </summary>
-        public void ResetToTacticalView()
+        /// <param name="newTarget">Optional physical player Transform to re-attach to.</param>
+        public void ResetToTacticalView(Transform newTarget = null)
         {
+            if (newTarget != null)
+            {
+                target = newTarget;
+            }
+
             if (isSkyViewActive)
             {
                 isSkyViewActive = false;
-                Debug.Log("[CameraFollow] Reset camera to standard tactical 60-degree view.");
+                godViewPanOffset = Vector3.zero;
+                Debug.Log($"[CameraFollow] Reset camera to standard tactical 60-degree view (Target: {(target != null ? target.name : "null")}).");
             }
         }
     }

@@ -35,26 +35,27 @@ namespace HunterVsHider.Cameras
         }
 
         /// <summary>
-        /// Activates the top-down 90-degree Sky View framing the entire arena grid with specified map size.
+        /// Activates the top-down 90-degree God-View framing the entire arena grid with specified map size and WASD pan.
         /// </summary>
-        public void ActivateAssassinSkyView(int mapSize)
+        public void ActivateAssassinGodView(int mapSize)
         {
             if (cameraFollow == null) cameraFollow = GetComponent<CameraFollow>();
             if (cameraFollow != null)
             {
-                cameraFollow.ActivateAssassinSkyView(mapSize);
+                cameraFollow.ActivateAssassinGodView(mapSize);
             }
         }
 
         /// <summary>
         /// Resets the camera back to the standard 60-degree tactical follow view.
         /// </summary>
-        public void ResetToTacticalView()
+        /// <param name="newTarget">Optional physical player Transform to re-attach to.</param>
+        public void ResetToTacticalView(Transform newTarget = null)
         {
             if (cameraFollow == null) cameraFollow = GetComponent<CameraFollow>();
             if (cameraFollow != null)
             {
-                cameraFollow.ResetToTacticalView();
+                cameraFollow.ResetToTacticalView(newTarget);
             }
         }
     }

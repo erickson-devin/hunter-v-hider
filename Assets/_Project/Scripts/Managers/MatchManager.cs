@@ -32,6 +32,8 @@ namespace HunterVsHider.Managers
         [Tooltip("Root container / spawn location for Combat Arena (Position: X=0, Y=0, Z=0)")]
         public Transform zoneCombatArena;
 
+        public static readonly Vector3 OffGridStagingPosition = new Vector3(-999f, 1f, -999f);
+
         [Header("Match State Synchronization")]
         [Tooltip("Synchronized match state across all network clients.")]
         public NetworkVariable<MatchState> currentMatchState = new NetworkVariable<MatchState>(
@@ -240,6 +242,27 @@ namespace HunterVsHider.Managers
                 var obj = GameObject.Find("Zone_CombatArena");
                 if (obj != null) zoneCombatArena = obj.transform;
             }
+
+            EnsureOffGridStagingPlatform();
+        }
+
+        public void EnsureOffGridStagingPlatform()
+        {
+            var existing = GameObject.Find("Zone_OffGridStagingPlatform");
+            if (existing == null)
+            {
+                GameObject platform = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                platform.name = "Zone_OffGridStagingPlatform";
+                platform.transform.position = new Vector3(-999f, -0.5f, -999f);
+                platform.transform.localScale = new Vector3(15f, 1f, 15f);
+                var rend = platform.GetComponent<Renderer>();
+                if (rend != null) rend.enabled = false; // Hidden off-grid floor
+                var col = platform.GetComponent<BoxCollider>();
+                if (col == null) col = platform.AddComponent<BoxCollider>();
+                col.enabled = true;
+                var netObj = platform.GetComponent<Unity.Netcode.NetworkObject>();
+                if (netObj != null) DestroyImmediate(netObj);
+            }
         }
 
         /// <summary>
@@ -441,11 +464,11 @@ namespace HunterVsHider.Managers
                     }
                     else if (playerState.Role == PlayerRole.Assassin)
                     {
-                        // Assassin teleports directly into the Combat Arena (e.g. North Spawn at Y=1, Z=18)
-                        Vector3 targetSpawn = combatArenaPos + new Vector3(0f, 1f, 18f);
+                        // Assassin physical character is staged off-grid during PrepPhase
+                        Vector3 targetSpawn = OffGridStagingPosition;
 
                         playerState.ServerTeleport(targetSpawn, Quaternion.Euler(0f, 180f, 0f));
-                        Debug.Log($"[MatchManager] Teleported Assassin ClientId {playerState.OwnerClientId} to Zone_CombatArena ({targetSpawn})");
+                        Debug.Log($"[MatchManager] Teleported Assassin ClientId {playerState.OwnerClientId} to OffGrid Staging Zone ({targetSpawn})");
                     }
                     else
                     {
@@ -543,8 +566,8 @@ namespace HunterVsHider.Managers
             }
             else if (playerState.Role == PlayerRole.Assassin)
             {
-                Vector3 combatArenaPos = zoneCombatArena != null ? zoneCombatArena.position : Vector3.zero;
-                targetSpawn = combatArenaPos + new Vector3(0f, 1f, 18f);
+                // Physical character is staged off-grid while camera enters God-View
+                targetSpawn = OffGridStagingPosition;
                 targetRot = Quaternion.Euler(0f, 180f, 0f);
             }
             else

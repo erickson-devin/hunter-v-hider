@@ -6,12 +6,26 @@ namespace HunterVsHider.Player
     [RequireComponent(typeof(Rigidbody))]
     public class PlayerMovement : NetworkBehaviour
     {
-        [Header("Movement Settings")]
-        public float moveSpeed = 5f;
+        [Header("Movement Speeds")]
+        [Tooltip("Standard walking speed in m/s.")]
+        public float walkSpeed = 5.0f;
+
+        [Tooltip("High-speed sprinting speed in m/s.")]
+        public float sprintSpeed = 8.5f;
+
+        [Tooltip("Legacy fallback move speed property.")]
+        public float moveSpeed = 5.0f;
+
+        [Header("Movement State")]
+        [SerializeField] private bool isSprinting = false;
+
+        public bool IsSprinting => isSprinting;
+        public float CurrentSpeed => isSprinting ? sprintSpeed : walkSpeed;
 
         private Rigidbody rb;
         private Vector3 movementInput;
         private Quaternion targetRotation;
+        private PlayerNetworkState playerNetworkState;
 
         public Transform WeaponHolder { get; private set; }
 
@@ -20,6 +34,7 @@ namespace HunterVsHider.Player
             rb = GetComponent<Rigidbody>();
             targetRotation = transform.rotation;
             WeaponHolder = transform.Find("WeaponHolder");
+            playerNetworkState = GetComponent<PlayerNetworkState>();
         }
 
         public override void OnNetworkSpawn()
@@ -48,6 +63,11 @@ namespace HunterVsHider.Player
             if (!enabled)
             {
                 movementInput = Vector3.zero;
+                isSprinting = false;
+                if (playerNetworkState != null && IsOwner)
+                {
+                    playerNetworkState.SetSprinting(false);
+                }
             }
         }
 
@@ -61,10 +81,24 @@ namespace HunterVsHider.Player
                 movementInput.x = Input.GetAxisRaw("Horizontal");
                 movementInput.z = Input.GetAxisRaw("Vertical");
                 movementInput.y = 0f;
+
+                // Dual-input sprint detection: Left Shift, Right Shift, OR physical Caps Lock hold
+                bool isSprintKeyPressed = Input.GetKey(KeyCode.LeftShift) || 
+                                          Input.GetKey(KeyCode.RightShift) || 
+                                          Input.GetKey(KeyCode.CapsLock);
+
+                isSprinting = isSprintKeyPressed && (movementInput.sqrMagnitude > 0.01f);
             }
             else
             {
                 movementInput = Vector3.zero;
+                isSprinting = false;
+            }
+
+            // Sync sprinting state to network
+            if (playerNetworkState != null)
+            {
+                playerNetworkState.SetSprinting(isSprinting);
             }
 
             HandleAimingInput();
@@ -97,8 +131,10 @@ namespace HunterVsHider.Player
             // Strict lifecycle separation: Apply physics in FixedUpdate
             if (movementInput.sqrMagnitude > 0.01f)
             {
+                float activeSpeed = isSprinting ? sprintSpeed : walkSpeed;
+
                 // Normalize to prevent faster diagonal movement
-                Vector3 moveVelocity = movementInput.normalized * moveSpeed;
+                Vector3 moveVelocity = movementInput.normalized * activeSpeed;
                 
                 // Using MovePosition for smooth kinematic-like movement on a dynamic rigidbody
                 rb.MovePosition(rb.position + moveVelocity * Time.fixedDeltaTime);

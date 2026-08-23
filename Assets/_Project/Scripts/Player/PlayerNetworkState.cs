@@ -29,8 +29,28 @@ namespace HunterVsHider.Player
             NetworkVariableWritePermission.Owner
         );
 
+        [Header("Movement State")]
+        [Tooltip("Networked sprint state for animation and remote client representation. Read: Everyone, Write: Owner.")]
+        public NetworkVariable<bool> isSprinting = new NetworkVariable<bool>(
+            false,
+            NetworkVariableReadPermission.Everyone,
+            NetworkVariableWritePermission.Owner
+        );
+
         public PlayerRole Role => currentRole.Value;
         public int SelectedWeaponID => selectedWeaponID.Value;
+        public bool IsSprinting => isSprinting.Value;
+
+        /// <summary>
+        /// Updates the networked sprinting state. Called by the owning client.
+        /// </summary>
+        public void SetSprinting(bool sprinting)
+        {
+            if (IsOwner && isSprinting.Value != sprinting)
+            {
+                isSprinting.Value = sprinting;
+            }
+        }
 
         public override void OnNetworkSpawn()
         {
@@ -116,30 +136,49 @@ namespace HunterVsHider.Player
             var cam = UnityEngine.Camera.main;
             var camFollow = cam != null ? cam.GetComponent<HunterVsHider.Cameras.CameraFollow>() : null;
             var playerMovement = GetComponent<PlayerMovement>();
+            var playerController = GetComponent<PlayerController>();
+            var weaponManager = GetComponent<PlayerWeaponManager>();
 
             if (state == HunterVsHider.Managers.MatchState.PrepPhase && Role == PlayerRole.Assassin)
             {
                 int mapSize = HunterVsHider.Managers.MatchManager.Instance != null ? HunterVsHider.Managers.MatchManager.Instance.SelectedMapSize : 50;
                 if (camFollow != null)
                 {
-                    camFollow.ActivateAssassinSkyView(mapSize);
+                    camFollow.ActivateAssassinGodView(mapSize);
                 }
                 if (playerMovement != null)
                 {
                     playerMovement.SetMovementEnabled(false);
                 }
-                Debug.Log($"[PlayerNetworkState] Assassin entering PrepPhase -> Activated Sky Camera for {mapSize}x{mapSize} grid and disabled movement.");
+                if (playerController != null)
+                {
+                    playerController.enabled = false;
+                }
+                if (weaponManager != null)
+                {
+                    weaponManager.enabled = false;
+                }
+                Debug.Log($"[PlayerNetworkState] Assassin entering PrepPhase -> Activated God-View Camera ({mapSize}x{mapSize}) with WASD pan. Disabled movement and weapon firing.");
             }
             else
             {
-                if (camFollow != null && camFollow.IsSkyViewActive)
+                if (camFollow != null)
                 {
-                    camFollow.ResetToTacticalView();
+                    camFollow.ResetToTacticalView(transform);
                 }
-                if (playerMovement != null && !playerMovement.CanMove)
+                if (playerMovement != null)
                 {
                     playerMovement.SetMovementEnabled(true);
                 }
+                if (playerController != null)
+                {
+                    playerController.enabled = true;
+                }
+                if (weaponManager != null)
+                {
+                    weaponManager.enabled = true;
+                }
+                Debug.Log($"[PlayerNetworkState] Local player ({Role}) in state {state} -> Tactical view attached to character. Movement and weapon firing enabled.");
             }
         }
 

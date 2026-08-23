@@ -98,6 +98,12 @@ namespace HunterVsHider.Managers
             if (NetworkManager.Singleton.ConnectedClients.TryGetValue(clientId, out var client) &&
                 client.PlayerObject != null)
             {
+                // Only force lobby positioning if we are in WaitingForPlayers state
+                if (MatchManager.Instance != null && MatchManager.Instance.CurrentState != MatchState.WaitingForPlayers)
+                {
+                    yield break;
+                }
+
                 Vector3 spawnPos = GetLobbySpawnPosition(clientId);
                 
                 var playerState = client.PlayerObject.GetComponent<Player.PlayerNetworkState>();
