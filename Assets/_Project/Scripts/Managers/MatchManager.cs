@@ -132,6 +132,8 @@ namespace HunterVsHider.Managers
 
         private void Awake()
         {
+            Application.runInBackground = true;
+
             if (Instance == null)
             {
                 Instance = this;
@@ -597,6 +599,12 @@ namespace HunterVsHider.Managers
 
             // Update local camera and movement
             playerState.UpdatePrepPhaseCameraAndMovement(MatchState.PrepPhase);
+
+            var pwm = localPlayerObj.GetComponent<PlayerWeaponManager>();
+            if (pwm != null)
+            {
+                pwm.ResetAllWeaponStates();
+            }
 
             Debug.Log($"[MatchManager] Local Client {playerState.OwnerClientId} ({playerState.Role}) executed PrepPhase teleport to {targetSpawn}");
         }

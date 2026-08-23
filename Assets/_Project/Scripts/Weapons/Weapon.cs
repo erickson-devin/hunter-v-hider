@@ -23,11 +23,27 @@ namespace HunterVsHider.Weapons
         protected bool isReloading = false;
 
         public int CurrentAmmo => currentAmmo;
+        public int currentMagazineAmmo { get => currentAmmo; set => currentAmmo = value; }
         public int MaxAmmo => (weaponData != null) ? weaponData.maxAmmo : 30;
+        public int maxMagazineAmmo => MaxAmmo;
         public bool IsInfiniteAmmo => (weaponData != null) && weaponData.isInfiniteAmmo;
         public bool CanReload => (weaponData != null) && weaponData.canReload && !weaponData.isInfiniteAmmo;
         public bool IsReloading => isReloading;
         public WeaponType Type => (weaponData != null) ? weaponData.weaponType : WeaponType.Firearm;
+        public Transform MuzzlePoint => muzzlePoint != null ? muzzlePoint : transform;
+
+        public AudioClip FireSFX
+        {
+            get
+            {
+                if (weaponData != null)
+                {
+                    if (weaponData.fireSound != null) return weaponData.fireSound;
+                    if (weaponData.attackSFX != null) return weaponData.attackSFX;
+                }
+                return fireSFX;
+            }
+        }
 
         protected virtual void Awake()
         {
@@ -50,25 +66,66 @@ namespace HunterVsHider.Weapons
             isReloading = false;
         }
 
-        protected virtual void InitializeAudio()
+        public virtual void ResetWeaponState()
+        {
+            StopAllCoroutines();
+            isReloading = false;
+            if (weaponData != null)
+            {
+                weaponData.isInfiniteReserve = true;
+                currentAmmo = weaponData.maxAmmo;
+            }
+            else
+            {
+                currentAmmo = MaxAmmo;
+            }
+            InitializeAudio();
+            Debug.Log($"[Weapon] ResetWeaponState on {gameObject.name}: currentMagazineAmmo = {currentAmmo}/{MaxAmmo}, isReloading = false, infiniteReserve = true.");
+        }
+
+        public virtual void InitializeAudio()
         {
             audioSource = GetComponent<AudioSource>();
             if (audioSource == null)
             {
                 audioSource = gameObject.AddComponent<AudioSource>();
-                audioSource.playOnAwake = false;
-                audioSource.spatialBlend = 0.2f;
+            }
+            audioSource.playOnAwake = false;
+            audioSource.spatialBlend = 0.0f; // Ensure audible 2D/pan audio for player
+            audioSource.volume = 1.0f;
+
+            if (weaponData != null)
+            {
+                if (weaponData.fireSound != null) fireSFX = weaponData.fireSound;
+                else if (weaponData.attackSFX != null) fireSFX = weaponData.attackSFX;
+
+                if (weaponData.reloadSFX != null) reloadSFX = weaponData.reloadSFX;
+                if (weaponData.dryFireSFX != null) dryFireSFX = weaponData.dryFireSFX;
+                if (weaponData.impactSFX != null) impactSFX = weaponData.impactSFX;
             }
 
-            if (fireSFX == null && weaponData != null && weaponData.attackSFX != null) fireSFX = weaponData.attackSFX;
-            if (reloadSFX == null && weaponData != null && weaponData.reloadSFX != null) reloadSFX = weaponData.reloadSFX;
-            if (dryFireSFX == null && weaponData != null && weaponData.dryFireSFX != null) dryFireSFX = weaponData.dryFireSFX;
-            if (impactSFX == null && weaponData != null && weaponData.impactSFX != null) impactSFX = weaponData.impactSFX;
-
-            if (fireSFX == null) fireSFX = CreateSynthClip("Attack", 440f, 0.1f);
-            if (reloadSFX == null) reloadSFX = CreateSynthClip("Reload", 220f, 0.5f);
+            if (fireSFX == null) fireSFX = CreateGunshotClip("Gunshot_Procedural", 160f, 0.18f);
+            if (reloadSFX == null) reloadSFX = CreateSynthClip("Reload", 220f, 0.4f);
             if (dryFireSFX == null) dryFireSFX = CreateSynthClip("DryFire", 880f, 0.05f);
             if (impactSFX == null) impactSFX = CreateSynthClip("Impact", 100f, 0.15f);
+        }
+
+        protected AudioClip CreateGunshotClip(string clipName, float frequency, float duration)
+        {
+            int sampleRate = 44100;
+            int samples = (int)(sampleRate * duration);
+            AudioClip clip = AudioClip.Create(clipName, samples, 1, sampleRate, false);
+            float[] data = new float[samples];
+            for (int i = 0; i < samples; i++)
+            {
+                float t = (float)i / samples;
+                float env = Mathf.Exp(-t * 14f);
+                float noise = (Random.value * 2f - 1f) * 0.65f;
+                float punch = Mathf.Sin(2 * Mathf.PI * frequency * (1f - t * 0.6f) * i / sampleRate) * 0.35f;
+                data[i] = (noise + punch) * env;
+            }
+            clip.SetData(data, 0);
+            return clip;
         }
 
         protected AudioClip CreateSynthClip(string clipName, float frequency, float duration)
@@ -240,9 +297,24 @@ namespace HunterVsHider.Weapons
 
             currentAmmo--;
 
-            if (fireSFX != null && audioSource != null)
+            AudioClip clip = FireSFX;
+            if (clip == null)
             {
-                audioSource.PlayOneShot(fireSFX, 0.8f);
+                InitializeAudio();
+                clip = FireSFX;
+            }
+
+            if (clip != null)
+            {
+                if (audioSource != null && audioSource.enabled && gameObject.activeInHierarchy)
+                {
+                    audioSource.PlayOneShot(clip, 1.0f);
+                }
+                else
+                {
+                    Vector3 soundPos = (muzzlePoint != null) ? muzzlePoint.position : transform.position;
+                    AudioSource.PlayClipAtPoint(clip, soundPos, 1.0f);
+                }
             }
 
             float range = (weaponData != null) ? weaponData.range : 50.0f;

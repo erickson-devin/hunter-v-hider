@@ -18,14 +18,13 @@ namespace HunterVsHider.Editor
             Debug.Log("==========================================================================");
 
             string dataDir = "Assets/_Project/Data";
-            if (!Directory.Exists(dataDir))
-            {
-                Directory.CreateDirectory(dataDir);
-                AssetDatabase.Refresh();
-            }
+            string weaponsDir = "Assets/_Project/Data/Weapons";
+            if (!Directory.Exists(dataDir)) Directory.CreateDirectory(dataDir);
+            if (!Directory.Exists(weaponsDir)) Directory.CreateDirectory(weaponsDir);
+            AssetDatabase.Refresh();
 
             // 1. Rifle Asset (Narrow focus beam, long range)
-            string riflePath = $"{dataDir}/WeaponData_Rifle.asset";
+            string riflePath = $"{weaponsDir}/WeaponData_Rifle.asset";
             WeaponData rifleData = AssetDatabase.LoadAssetAtPath<WeaponData>(riflePath);
             if (rifleData == null)
             {
@@ -46,7 +45,7 @@ namespace HunterVsHider.Editor
             EditorUtility.SetDirty(rifleData);
 
             // 2. Shotgun Asset (Flood light, CQC wide spread)
-            string shotgunPath = $"{dataDir}/WeaponData_Shotgun.asset";
+            string shotgunPath = $"{weaponsDir}/WeaponData_Shotgun.asset";
             WeaponData shotgunData = AssetDatabase.LoadAssetAtPath<WeaponData>(shotgunPath);
             if (shotgunData == null)
             {
@@ -69,7 +68,7 @@ namespace HunterVsHider.Editor
             EditorUtility.SetDirty(shotgunData);
 
             // 3. Pistol Asset (Balanced tactical cone)
-            string pistolPath = $"{dataDir}/WeaponData_Pistol.asset";
+            string pistolPath = $"{weaponsDir}/WeaponData_Pistol.asset";
             WeaponData pistolData = AssetDatabase.LoadAssetAtPath<WeaponData>(pistolPath);
             if (pistolData == null)
             {

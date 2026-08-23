@@ -134,6 +134,7 @@ namespace HunterVsHider.Managers
                 if (pwm != null)
                 {
                     pwm.SetupRoleLoadout(PlayerRole.Police);
+                    pwm.ResetAllWeaponStates();
                 }
                 localPlayer.CmdSelectWeapon(0);
                 UpdateSquadSync();

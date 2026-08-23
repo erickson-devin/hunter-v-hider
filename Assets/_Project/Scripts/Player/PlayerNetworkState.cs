@@ -177,6 +177,10 @@ namespace HunterVsHider.Player
                 if (weaponManager != null)
                 {
                     weaponManager.enabled = true;
+                    if (state == HunterVsHider.Managers.MatchState.PrepPhase)
+                    {
+                        weaponManager.ResetAllWeaponStates();
+                    }
                 }
                 Debug.Log($"[PlayerNetworkState] Local player ({Role}) in state {state} -> Tactical view attached to character. Movement and weapon firing enabled.");
             }
@@ -190,6 +194,7 @@ namespace HunterVsHider.Player
             if (weaponMgr != null)
             {
                 weaponMgr.SetupRoleLoadout(newRole);
+                weaponMgr.ResetAllWeaponStates();
             }
 
             // Re-apply vision settings when role updates
@@ -259,11 +264,27 @@ namespace HunterVsHider.Player
                 visualBlock = blockObj.transform;
             }
 
-            // Disable legacy static gun meshes if present
+            // Disable individual MeshRenderers on weapon holder children so visualBlock renders cleanly without disabling weapon GameObjects
             Transform p = weaponHolder.Find("Gun_Pistol");
-            if (p != null) p.gameObject.SetActive(false);
+            if (p != null)
+            {
+                var mr = p.GetComponent<MeshRenderer>();
+                if (mr != null) mr.enabled = false;
+                var pm = p.Find("Pistol_Mesh");
+                if (pm != null && pm.GetComponent<MeshRenderer>() != null) pm.GetComponent<MeshRenderer>().enabled = false;
+            }
             Transform r = weaponHolder.Find("Gun_Rifle");
-            if (r != null) r.gameObject.SetActive(false);
+            if (r != null)
+            {
+                var mr = r.GetComponent<MeshRenderer>();
+                if (mr != null) mr.enabled = false;
+            }
+            Transform s = weaponHolder.Find("Gun_Shotgun");
+            if (s != null)
+            {
+                var mr = s.GetComponent<MeshRenderer>();
+                if (mr != null) mr.enabled = false;
+            }
 
             MeshRenderer renderer = visualBlock.GetComponent<MeshRenderer>();
             Material mat = null;

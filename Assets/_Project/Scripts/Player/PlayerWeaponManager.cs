@@ -175,6 +175,7 @@ namespace HunterVsHider.Player
             rifleData.isInfiniteReserve = true;
             rifleData.canReload = true;
             rifle.weaponData = rifleData;
+            rifle.InitializeAudio();
             rifle.InitializeAmmo();
 
             weaponSlots[0] = rifle;
@@ -207,6 +208,7 @@ namespace HunterVsHider.Player
             shotgunData.isInfiniteReserve = true;
             shotgunData.canReload = true;
             shotgun.weaponData = shotgunData;
+            shotgun.InitializeAudio();
             shotgun.InitializeAmmo();
 
             weaponSlots[1] = shotgun;
@@ -237,11 +239,34 @@ namespace HunterVsHider.Player
             pistolData.isInfiniteReserve = true;
             pistolData.canReload = true;
             pistol.weaponData = pistolData;
+            pistol.InitializeAudio();
             pistol.InitializeAmmo();
 
             weaponSlots[2] = pistol;
 
+            ResetAllWeaponStates();
+
             Debug.Log("[PlayerWeaponManager] Configured Police God-Tier Loadout: Slot 0 (Rifle - 45 deg / 24m), Slot 1 (Shotgun - 110 deg / 10m), Slot 2 (Pistol - 75 deg / 16m).");
+        }
+
+        /// <summary>
+        /// Resets state on all equipped weapons: cancels any active reload coroutines, resets isReloading to false,
+        /// restores currentMagazineAmmo to maximum capacity, and enforces infinite reserves.
+        /// </summary>
+        public void ResetAllWeaponStates()
+        {
+            if (weaponSlots == null) return;
+
+            for (int i = 0; i < weaponSlots.Length; i++)
+            {
+                Weapon weapon = weaponSlots[i];
+                if (weapon != null)
+                {
+                    weapon.ResetWeaponState();
+                }
+            }
+
+            Debug.Log($"[PlayerWeaponManager] ResetAllWeaponStates executed: all equipped weapons reset to max magazine capacity with infinite reserves and reload coroutines cancelled.");
         }
 
         private void Update()

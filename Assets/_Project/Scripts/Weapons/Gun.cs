@@ -23,6 +23,8 @@ namespace HunterVsHider.Weapons
                 weaponData.reloadTime = legacyReloadTime;
                 weaponData.range = legacyMaxRange;
                 weaponData.damage = legacyDamage;
+                weaponData.isInfiniteReserve = true;
+                weaponData.canReload = true;
             }
 
             base.Awake();

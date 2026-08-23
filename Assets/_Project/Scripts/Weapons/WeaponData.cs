@@ -58,6 +58,9 @@ namespace HunterVsHider.Weapons
         [Tooltip("Maximum capacity of magazine/stock.")]
         public int maxAmmo = 30;
 
+        public int magazineSize => maxAmmo;
+        public int maxMagazineAmmo => maxAmmo;
+
         [Tooltip("If true, ammo is not consumed and never runs out.")]
         public bool isInfiniteAmmo = false;
 
@@ -71,9 +74,12 @@ namespace HunterVsHider.Weapons
         public float reloadTime = 1.5f;
 
         [Header("Audio Settings")]
+        public AudioClip fireSound;
         public AudioClip attackSFX;
         public AudioClip reloadSFX;
         public AudioClip dryFireSFX;
         public AudioClip impactSFX;
+
+        public AudioClip EffectiveFireSFX => fireSound != null ? fireSound : attackSFX;
     }
 }
