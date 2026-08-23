@@ -76,7 +76,14 @@ namespace HunterVsHider.Cameras
 
             Vector3 targetLookAhead = Vector3.zero;
 
-            if (cam != null)
+            // Check Match State:
+            // - During CombatPhase: look-ahead offset is gated behind holding Right Mouse Button (ADS).
+            // - During Lobby and PrepPhase: look-ahead offset is always active based on cursor position.
+            var matchMgr = HunterVsHider.Managers.MatchManager.Instance ?? HunterVsHider.Managers.MatchManager.Singleton;
+            bool isCombatPhase = matchMgr != null && matchMgr.CurrentState == HunterVsHider.Managers.MatchState.CombatPhase;
+            bool shouldApplyLookAhead = !isCombatPhase || Input.GetMouseButton(1);
+
+            if (shouldApplyLookAhead && cam != null)
             {
                 // Convert screen mouse position to normalized viewport space [0, 1]
                 Vector3 viewportMouse = cam.ScreenToViewportPoint(Input.mousePosition);
@@ -91,7 +98,7 @@ namespace HunterVsHider.Cameras
                 targetLookAhead = new Vector3(centeredCursor.x, 0f, centeredCursor.y) * maxLookAheadOffset;
             }
 
-            // Smoothly interpolate look-ahead offset continuously across all match states
+            // Smoothly interpolate look-ahead offset
             currentLookAheadOffset = Vector3.SmoothDamp(currentLookAheadOffset, targetLookAhead, ref lookAheadVelocity, lookAheadSmoothTime);
 
             if (isSkyViewActive)
