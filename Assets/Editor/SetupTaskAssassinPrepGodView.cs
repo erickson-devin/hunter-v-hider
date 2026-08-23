@@ -21,7 +21,7 @@ namespace HunterVsHider.Editor
             Scene activeScene = SceneManager.GetActiveScene();
 
             // 1. Verify MatchManager and Off-Grid Staging Zone
-            var matchManager = Object.FindFirstObjectByType<MatchManager>();
+            var matchManager = Object.FindAnyObjectByType<MatchManager>();
             if (matchManager == null)
             {
                 Debug.LogError("[Verification FAIL] MatchManager not found in active scene!");
@@ -56,7 +56,7 @@ namespace HunterVsHider.Editor
 
             // 2. Verify CameraFollow and God-View Panning Mode
             var cam = Camera.main;
-            if (cam == null) cam = Object.FindFirstObjectByType<Camera>();
+            if (cam == null) cam = Object.FindAnyObjectByType<Camera>();
             if (cam != null)
             {
                 var camFollow = cam.GetComponent<CameraFollow>();

@@ -177,12 +177,47 @@ namespace HunterVsHider.Vision
             }
         }
 
+        /// <summary>
+        /// Resets all persistent Fog of War memory buffers to pure black (Unexplored).
+        /// Re-renders the Fog of War mesh so the arena outside the starting flashlight cone returns to pitch black.
+        /// </summary>
+        public void ClearExploredMemoryGrid()
+        {
+            if (FogMemoryManager.Instance != null)
+            {
+                FogMemoryManager.Instance.ResetFog();
+            }
+
+            GenerateDynamicFOVMesh();
+            Debug.Log($"[DynamicFOV] Cleared explored memory buffer for {gameObject.name}: Map reset to pitch black unexplored fog.");
+        }
+
+        private Vector3 lastFramePosition;
+        private bool hasInitializedPosition = false;
+
         private void LateUpdate()
         {
             if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening && !IsOwner)
             {
                 return;
             }
+
+            if (!hasInitializedPosition)
+            {
+                lastFramePosition = transform.position;
+                hasInitializedPosition = true;
+            }
+
+            // Displacement Guard: Detect large frame-to-frame teleportation displacement (> 10m)
+            float frameDisplacement = Vector3.Distance(transform.position, lastFramePosition);
+            if (frameDisplacement > 10.0f)
+            {
+                // Instant RPC teleport detected -> skip memory updating and clear memory buffers to prevent dirty streak artifacts
+                lastFramePosition = transform.position;
+                ClearExploredMemoryGrid();
+                return;
+            }
+            lastFramePosition = transform.position;
 
             if (isTransitioningVision && !_isVisionMaskSuppressed)
             {

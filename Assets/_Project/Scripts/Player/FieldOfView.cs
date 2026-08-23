@@ -14,5 +14,10 @@ namespace HunterVsHider.Player
         {
             // Placeholder for Physics2D overlap checks and raycasting
         }
+
+        public void ClearExploredMemoryGrid()
+        {
+            // Facade placeholder
+        }
     }
 }

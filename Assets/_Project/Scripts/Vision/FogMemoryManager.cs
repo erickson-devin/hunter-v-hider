@@ -94,6 +94,19 @@ namespace HunterVsHider.Vision
         {
             if (!isInitialized || decayMaterial == null || rawVisRT == null || memoryBufferRT == null) return;
 
+            // State guard: Do not accumulate memory during non-combat phases (Lobby / PrepPhase)
+            var matchMgr = HunterVsHider.Managers.MatchManager.Instance ?? HunterVsHider.Managers.MatchManager.Singleton;
+            bool isNonCombat = matchMgr == null || 
+                               matchMgr.CurrentState == HunterVsHider.Managers.MatchState.WaitingForPlayers ||
+                               matchMgr.CurrentState == HunterVsHider.Managers.MatchState.PrepPhase ||
+                               matchMgr.CurrentState == HunterVsHider.Managers.MatchState.RoleAssignment;
+
+            if (isNonCombat)
+            {
+                // Suppress persistent memory accumulation in non-combat phases
+                return;
+            }
+
             decayMaterial.SetTexture("_CurrentVisTex", rawVisRT);
             decayMaterial.SetFloat("_MemoryFloor", memoryFloor);
 

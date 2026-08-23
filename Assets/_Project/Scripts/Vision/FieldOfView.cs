@@ -39,6 +39,15 @@ namespace HunterVsHider.Vision
             }
         }
 
+        public void ClearExploredMemoryGrid()
+        {
+            if (dynamicFOV == null) Awake();
+            if (dynamicFOV != null)
+            {
+                dynamicFOV.ClearExploredMemoryGrid();
+            }
+        }
+
         public float ViewAngle => (dynamicFOV != null) ? dynamicFOV.viewAngle : 90f;
         public float ViewRadius => (dynamicFOV != null) ? dynamicFOV.viewRadius : 15f;
     }

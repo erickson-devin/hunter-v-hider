@@ -203,6 +203,7 @@ namespace HunterVsHider.Player
 
                     if (Role == PlayerRole.Police)
                     {
+                        dynamicFov.ClearExploredMemoryGrid();
                         if (weaponManager != null && weaponManager.ActiveWeapon != null && weaponManager.ActiveWeapon.weaponData != null)
                         {
                             var wData = weaponManager.ActiveWeapon.weaponData;
@@ -215,6 +216,7 @@ namespace HunterVsHider.Player
                     }
                     else if (Role == PlayerRole.Assassin)
                     {
+                        HunterVsHider.Vision.FogMemoryManager.Instance?.SetAllToMemory(0.5f);
                         dynamicFov.UpdateWeaponVisionProfile(360f, 12f, 0.3f);
                     }
                 }
@@ -607,6 +609,8 @@ namespace HunterVsHider.Player
             {
                 netTransform.Teleport(targetPosition, targetRotation, transform.localScale);
             }
+
+            Physics.SyncTransforms();
 
             Debug.Log($"[PlayerNetworkState] ClientId {OwnerClientId} successfully teleported to {targetPosition}");
         }

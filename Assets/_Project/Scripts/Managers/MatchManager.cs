@@ -519,6 +519,8 @@ namespace HunterVsHider.Managers
                         Debug.Log($"[MatchManager] Teleported Assassin ClientId {playerState.OwnerClientId} to Combat Arena ({targetSpawn})");
                     }
                 }
+
+                Physics.SyncTransforms();
             }
         }
 
@@ -597,6 +599,8 @@ namespace HunterVsHider.Managers
                 netTransform.Teleport(targetSpawn, targetRot, localPlayerObj.transform.localScale);
             }
 
+            Physics.SyncTransforms();
+
             // Update local camera and movement
             playerState.UpdatePrepPhaseCameraAndMovement(MatchState.PrepPhase);
 
@@ -612,19 +616,27 @@ namespace HunterVsHider.Managers
         }
 
         /// <summary>
-        /// Executes client-side / local player response when entering CombatPhase.
-        /// Spawns the character in the maze, re-enables full vision and Fog of War, snaps camera back, and enables movement.
+        /// Executes client-side / local player response when entering CombatPhase via a sequential settlement pipeline:
+        /// Step 1: Teleport to spawn
+        /// Step 2: Sync physics transforms
+        /// Step 3: Yield frame for NetworkTransform & camera settlement
+        /// Step 4: Clear Fog memory and enable FOV cone at settled coordinates
         /// </summary>
         public void ExecuteLocalClientCombatPhaseResponse()
         {
+            StartCoroutine(LocalClientCombatPhaseSettlementRoutine());
+        }
+
+        private System.Collections.IEnumerator LocalClientCombatPhaseSettlementRoutine()
+        {
             FindZoneReferencesIfNull();
 
-            if (NetworkManager.Singleton == null || NetworkManager.Singleton.LocalClient == null) return;
+            if (NetworkManager.Singleton == null || NetworkManager.Singleton.LocalClient == null) yield break;
             var localPlayerObj = NetworkManager.Singleton.LocalClient.PlayerObject;
-            if (localPlayerObj == null) return;
+            if (localPlayerObj == null) yield break;
 
             var playerState = localPlayerObj.GetComponent<PlayerNetworkState>();
-            if (playerState == null) return;
+            if (playerState == null) yield break;
 
             int mapSize = selectedMapSize.Value > 0 ? selectedMapSize.Value : 50;
 
@@ -647,13 +659,35 @@ namespace HunterVsHider.Managers
                 targetRot = Quaternion.identity;
             }
 
+            // Step 1 (Teleport): Move local transform to destination spawn coordinates
             playerState.ApplyTeleport(targetSpawn, targetRot);
+
+            // Step 2 (Physics Sync): Update engine physics matrix immediately
+            Physics.SyncTransforms();
+
+            // Step 3 (Yield Frame): Allow NetworkTransform, rendering, and camera to settle at target
+            yield return new WaitForEndOfFrame();
+
+            // Step 4 (Memory Wipe & FOV Enable): Wipe memory buffers at settled coordinates, then activate weapon FOV
+            if (playerState.Role == PlayerRole.Police)
+            {
+                HunterVsHider.Vision.FogMemoryManager.Instance?.ResetFog();
+                var dynFov = localPlayerObj.GetComponentInChildren<HunterVsHider.Vision.DynamicFOV>(true);
+                if (dynFov != null)
+                {
+                    dynFov.ClearExploredMemoryGrid();
+                }
+            }
+            else if (playerState.Role == PlayerRole.Assassin)
+            {
+                HunterVsHider.Vision.FogMemoryManager.Instance?.SetAllToMemory(0.5f);
+            }
 
             // Re-apply role vision and snap camera back
             playerState.ApplyRoleVision();
             playerState.UpdatePrepPhaseCameraAndMovement(MatchState.CombatPhase);
 
-            Debug.Log($"[MatchManager] Local Client {playerState.OwnerClientId} ({playerState.Role}) transitioned to CombatPhase at {targetSpawn}");
+            Debug.Log($"[MatchManager] Local Client {playerState.OwnerClientId} ({playerState.Role}) completed CombatPhase settlement at {targetSpawn}");
         }
 
 

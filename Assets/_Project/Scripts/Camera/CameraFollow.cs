@@ -16,6 +16,15 @@ namespace HunterVsHider.Cameras
         public float pitch = 60f;
         public float transitionSpeed = 8f;
 
+        [Header("Mouse-Lead Look-Ahead Camera Offset")]
+        [Tooltip("Max distance in meters the camera shifts toward the mouse cursor when aiming away from player.")]
+        public float maxLookAheadOffset = 5.0f;
+        [Tooltip("Smooth time in seconds for mouse-lead look-ahead transitions.")]
+        public float lookAheadSmoothTime = 0.15f;
+
+        private Vector3 currentLookAheadOffset = Vector3.zero;
+        private Vector3 lookAheadVelocity = Vector3.zero;
+
         [Header("God-View Camera Mode (Assassin Prep)")]
         [SerializeField] private bool isSkyViewActive = false;
         [SerializeField] private Vector3 targetSkyPosition;
@@ -23,6 +32,8 @@ namespace HunterVsHider.Cameras
         public float godViewPanSpeed = 30f;
 
         public bool IsSkyViewActive => isSkyViewActive;
+        public bool isGodViewActive => isSkyViewActive;
+        public bool IsGodViewActive => isSkyViewActive;
 
         private UnityEngine.Camera cam;
         private Vector3 godViewPanOffset = Vector3.zero;
@@ -60,17 +71,42 @@ namespace HunterVsHider.Cameras
 
         private void LateUpdate()
         {
+            if (cam == null) cam = GetComponent<UnityEngine.Camera>();
+            if (cam == null) cam = UnityEngine.Camera.main;
+
+            Vector3 targetLookAhead = Vector3.zero;
+
+            if (cam != null)
+            {
+                // Convert screen mouse position to normalized viewport space [0, 1]
+                Vector3 viewportMouse = cam.ScreenToViewportPoint(Input.mousePosition);
+
+                // Calculate centered cursor offset [-1, 1]
+                Vector2 centeredCursor = new Vector2(viewportMouse.x - 0.5f, viewportMouse.y - 0.5f) * 2f;
+
+                // Clamp to [-1, 1] magnitude
+                centeredCursor = Vector2.ClampMagnitude(centeredCursor, 1.0f);
+
+                // Calculate world-space offset on the XZ plane
+                targetLookAhead = new Vector3(centeredCursor.x, 0f, centeredCursor.y) * maxLookAheadOffset;
+            }
+
+            // Smoothly interpolate look-ahead offset continuously across all match states
+            currentLookAheadOffset = Vector3.SmoothDamp(currentLookAheadOffset, targetLookAhead, ref lookAheadVelocity, lookAheadSmoothTime);
+
             if (isSkyViewActive)
             {
-                // Smoothly lerp position and rotation into Assassin God-View
-                transform.position = Vector3.Lerp(transform.position, targetSkyPosition, transitionSpeed * Time.deltaTime);
+                // Smoothly lerp position and rotation into Assassin God-View with unified mouse-lead support
+                Vector3 skyTargetPos = targetSkyPosition + currentLookAheadOffset;
+                transform.position = Vector3.Lerp(transform.position, skyTargetPos, transitionSpeed * Time.deltaTime);
                 transform.rotation = Quaternion.Slerp(transform.rotation, targetSkyRotation, transitionSpeed * Time.deltaTime);
             }
             else
             {
                 if (target == null) return;
 
-                Vector3 targetPos = target.position + offset;
+                // Combine offset with player position and tactical offset
+                Vector3 targetPos = target.position + offset + currentLookAheadOffset;
                 transform.position = Vector3.Lerp(transform.position, targetPos, transitionSpeed * Time.deltaTime);
                 transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.Euler(pitch, 0f, 0f), transitionSpeed * Time.deltaTime);
             }
@@ -148,6 +184,8 @@ namespace HunterVsHider.Cameras
             {
                 isSkyViewActive = false;
                 godViewPanOffset = Vector3.zero;
+                currentLookAheadOffset = Vector3.zero;
+                lookAheadVelocity = Vector3.zero;
                 Debug.Log($"[CameraFollow] Reset camera to standard tactical 60-degree view (Target: {(target != null ? target.name : "null")}).");
             }
         }
