@@ -9,6 +9,20 @@ namespace HunterVsHider.Vision
     {
         private DynamicFOV dynamicFOV;
 
+        public bool isVisionMaskSuppressed
+        {
+            get
+            {
+                if (dynamicFOV == null) dynamicFOV = GetComponentInChildren<DynamicFOV>(true);
+                return (dynamicFOV != null) && dynamicFOV.isVisionMaskSuppressed;
+            }
+            set
+            {
+                if (dynamicFOV == null) dynamicFOV = GetComponentInChildren<DynamicFOV>(true);
+                if (dynamicFOV != null) dynamicFOV.isVisionMaskSuppressed = value;
+            }
+        }
+
         private void Awake()
         {
             dynamicFOV = GetComponent<DynamicFOV>();

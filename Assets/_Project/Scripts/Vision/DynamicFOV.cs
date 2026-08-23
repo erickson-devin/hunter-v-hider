@@ -88,15 +88,60 @@ namespace HunterVsHider.Vision
             }
         }
 
+        [Header("Vision Mask Suppression")]
+        [Tooltip("When true (Lobby/PrepPhase), FOV restrictions and dark fog are suppressed to provide 360-degree full-screen visibility.")]
+        [SerializeField] private bool _isVisionMaskSuppressed = false;
+
+        public bool isVisionMaskSuppressed
+        {
+            get => _isVisionMaskSuppressed;
+            set => SetVisionMaskSuppression(value);
+        }
+
         private float targetViewAngle = 90f;
         private float targetViewRadius = 15f;
+        private float targetProximityRadius = 2.5f;
         private float visionTransitionSpeed = 5f;
         private bool isTransitioningVision = false;
 
-        public void UpdateWeaponVisionProfile(float targetAngle, float targetDistance, float transitionDuration = 0.2f)
+        public void SetVisionMaskSuppression(bool suppressed, float transitionDuration = 0.3f)
+        {
+            if (_isVisionMaskSuppressed == suppressed && !isTransitioningVision) return;
+            _isVisionMaskSuppressed = suppressed;
+
+            // Toggle Flashlight outline / Visuals
+            Transform parent = transform.parent != null ? transform.parent : transform;
+            Transform fovVisuals = parent.Find("FOV_Visuals");
+            if (fovVisuals != null)
+            {
+                fovVisuals.gameObject.SetActive(!suppressed);
+            }
+
+            if (suppressed)
+            {
+                // In Lobby & PrepPhase: full 360 degree unrestricted vision
+                viewAngle = 360f;
+                viewRadius = 60f;
+                proximityRadius = 60f;
+                isTransitioningVision = false;
+                Debug.Log($"[DynamicFOV] Vision Mask SUPPRESSED for {gameObject.name}: 360 deg unrestricted full-screen visibility enabled.");
+            }
+            else
+            {
+                // When entering CombatPhase: smoothly contract from 360 deg full-screen down to weapon profile over 0.3s
+                viewAngle = 360f;
+                viewRadius = Mathf.Max(viewRadius, 30f);
+                proximityRadius = 2.5f;
+                UpdateWeaponVisionProfile(targetViewAngle, targetViewRadius, transitionDuration);
+                Debug.Log($"[DynamicFOV] Vision Mask RESTORED for {gameObject.name}: Transitioning to {targetViewAngle} deg / {targetViewRadius}m over {transitionDuration}s.");
+            }
+        }
+
+        public void UpdateWeaponVisionProfile(float targetAngle, float targetDistance, float transitionDuration = 0.3f)
         {
             targetViewAngle = targetAngle;
             targetViewRadius = targetDistance;
+            targetProximityRadius = 2.5f;
             visionTransitionSpeed = (transitionDuration > 0.001f) ? (1f / transitionDuration) : 100f;
             isTransitioningVision = true;
         }
@@ -105,21 +150,30 @@ namespace HunterVsHider.Vision
         {
             if (role == Player.PlayerRole.Police)
             {
-                viewAngle = 90f;
-                viewRadius = 15f;
-                proximityRadius = 2.5f;
-                rayCount = 240;
                 targetViewAngle = 90f;
                 targetViewRadius = 15f;
+                targetProximityRadius = 2.5f;
+                rayCount = 240;
             }
             else if (role == Player.PlayerRole.Assassin)
             {
-                viewAngle = 360f;
-                viewRadius = 12f;
-                proximityRadius = 12f;
-                rayCount = 240;
                 targetViewAngle = 360f;
                 targetViewRadius = 12f;
+                targetProximityRadius = 12f;
+                rayCount = 240;
+            }
+
+            if (_isVisionMaskSuppressed)
+            {
+                viewAngle = 360f;
+                viewRadius = 60f;
+                proximityRadius = 60f;
+            }
+            else
+            {
+                viewAngle = targetViewAngle;
+                viewRadius = targetViewRadius;
+                proximityRadius = targetProximityRadius;
             }
         }
 
@@ -130,12 +184,12 @@ namespace HunterVsHider.Vision
                 return;
             }
 
-            if (isTransitioningVision)
+            if (isTransitioningVision && !_isVisionMaskSuppressed)
             {
-                viewAngle = Mathf.MoveTowards(viewAngle, targetViewAngle, Mathf.Abs(targetViewAngle - viewAngle) * visionTransitionSpeed * Time.deltaTime + 10f * Time.deltaTime);
-                viewRadius = Mathf.MoveTowards(viewRadius, targetViewRadius, Mathf.Abs(targetViewRadius - viewRadius) * visionTransitionSpeed * Time.deltaTime + 2f * Time.deltaTime);
+                viewAngle = Mathf.MoveTowards(viewAngle, targetViewAngle, (Mathf.Abs(targetViewAngle - viewAngle) * visionTransitionSpeed + 20f) * Time.deltaTime);
+                viewRadius = Mathf.MoveTowards(viewRadius, targetViewRadius, (Mathf.Abs(targetViewRadius - viewRadius) * visionTransitionSpeed + 5f) * Time.deltaTime);
 
-                if (Mathf.Abs(viewAngle - targetViewAngle) < 0.1f && Mathf.Abs(viewRadius - targetViewRadius) < 0.1f)
+                if (Mathf.Abs(viewAngle - targetViewAngle) < 0.2f && Mathf.Abs(viewRadius - targetViewRadius) < 0.2f)
                 {
                     viewAngle = targetViewAngle;
                     viewRadius = targetViewRadius;
@@ -196,7 +250,7 @@ namespace HunterVsHider.Vision
                 Vector3 dir = DirectionFromAngle(currentRelAngle, false);
 
                 Vector3 worldPoint;
-                if (Physics.Raycast(rayOrigin, dir, out RaycastHit hit, maxDist, obstacleMask))
+                if (!_isVisionMaskSuppressed && Physics.Raycast(rayOrigin, dir, out RaycastHit hit, maxDist, obstacleMask))
                 {
                     // Raycast overshoot: bleed into wall volume so flat wall tops are illuminated
                     worldPoint = hit.point + (dir * wallTopOvershoot);

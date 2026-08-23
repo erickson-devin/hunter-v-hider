@@ -138,27 +138,104 @@ namespace HunterVsHider.Player
             var playerMovement = GetComponent<PlayerMovement>();
             var playerController = GetComponent<PlayerController>();
             var weaponManager = GetComponent<PlayerWeaponManager>();
+            var dynamicFov = GetComponentInChildren<HunterVsHider.Vision.DynamicFOV>(true);
 
-            if (state == HunterVsHider.Managers.MatchState.PrepPhase && Role == PlayerRole.Assassin)
+            if (state == HunterVsHider.Managers.MatchState.WaitingForPlayers || state == HunterVsHider.Managers.MatchState.PrepPhase || state == HunterVsHider.Managers.MatchState.RoleAssignment)
             {
-                int mapSize = HunterVsHider.Managers.MatchManager.Instance != null ? HunterVsHider.Managers.MatchManager.Instance.SelectedMapSize : 50;
+                if (dynamicFov != null)
+                {
+                    dynamicFov.isVisionMaskSuppressed = true;
+                }
+
+                if (state == HunterVsHider.Managers.MatchState.PrepPhase && Role == PlayerRole.Assassin)
+                {
+                    int mapSize = HunterVsHider.Managers.MatchManager.Instance != null ? HunterVsHider.Managers.MatchManager.Instance.SelectedMapSize : 50;
+                    if (camFollow != null)
+                    {
+                        camFollow.ActivateAssassinGodView(mapSize);
+                    }
+                    if (playerMovement != null)
+                    {
+                        playerMovement.SetMovementEnabled(false);
+                    }
+                    if (playerController != null)
+                    {
+                        playerController.enabled = false;
+                    }
+                    if (weaponManager != null)
+                    {
+                        weaponManager.enabled = false;
+                    }
+                    Debug.Log($"[PlayerNetworkState] Assassin entering PrepPhase -> Activated God-View Camera ({mapSize}x{mapSize}) with WASD pan. Disabled movement and weapon firing.");
+                }
+                else
+                {
+                    if (camFollow != null)
+                    {
+                        camFollow.ResetToTacticalView(transform);
+                    }
+                    if (playerMovement != null)
+                    {
+                        playerMovement.SetMovementEnabled(true);
+                    }
+                    if (playerController != null)
+                    {
+                        playerController.enabled = true;
+                    }
+                    if (weaponManager != null)
+                    {
+                        weaponManager.enabled = true;
+                        if (state == HunterVsHider.Managers.MatchState.PrepPhase)
+                        {
+                            weaponManager.ResetAllWeaponStates();
+                        }
+                    }
+
+                    ForceEnableAllPlayerRenderers();
+                    Debug.Log($"[PlayerNetworkState] Local player ({Role}) in non-combat state {state} -> Tactical view attached. Full 360 deg unrestricted vision enabled.");
+                }
+            }
+            else if (state == HunterVsHider.Managers.MatchState.CombatPhase)
+            {
+                if (dynamicFov != null)
+                {
+                    dynamicFov.isVisionMaskSuppressed = false;
+
+                    if (Role == PlayerRole.Police)
+                    {
+                        if (weaponManager != null && weaponManager.ActiveWeapon != null && weaponManager.ActiveWeapon.weaponData != null)
+                        {
+                            var wData = weaponManager.ActiveWeapon.weaponData;
+                            dynamicFov.UpdateWeaponVisionProfile(wData.viewAngle, wData.viewDistance, 0.3f);
+                        }
+                        else
+                        {
+                            dynamicFov.UpdateWeaponVisionProfile(45f, 24f, 0.3f);
+                        }
+                    }
+                    else if (Role == PlayerRole.Assassin)
+                    {
+                        dynamicFov.UpdateWeaponVisionProfile(360f, 12f, 0.3f);
+                    }
+                }
+
                 if (camFollow != null)
                 {
-                    camFollow.ActivateAssassinGodView(mapSize);
+                    camFollow.ResetToTacticalView(transform);
                 }
                 if (playerMovement != null)
                 {
-                    playerMovement.SetMovementEnabled(false);
+                    playerMovement.SetMovementEnabled(true);
                 }
                 if (playerController != null)
                 {
-                    playerController.enabled = false;
+                    playerController.enabled = true;
                 }
                 if (weaponManager != null)
                 {
-                    weaponManager.enabled = false;
+                    weaponManager.enabled = true;
                 }
-                Debug.Log($"[PlayerNetworkState] Assassin entering PrepPhase -> Activated God-View Camera ({mapSize}x{mapSize}) with WASD pan. Disabled movement and weapon firing.");
+                Debug.Log($"[PlayerNetworkState] Local player ({Role}) entered CombatPhase -> Smooth 0.3s transition to active weapon vision cone profile.");
             }
             else
             {
@@ -177,12 +254,34 @@ namespace HunterVsHider.Player
                 if (weaponManager != null)
                 {
                     weaponManager.enabled = true;
-                    if (state == HunterVsHider.Managers.MatchState.PrepPhase)
+                }
+            }
+        }
+
+        /// <summary>
+        /// Explicitly enables all mesh renderers and UI across all player instances in non-combat phases
+        /// ensuring 100% mutual visibility across the armory and staging zones.
+        /// </summary>
+        public static void ForceEnableAllPlayerRenderers()
+        {
+            int visionMaskLayer = LayerMask.NameToLayer("VisionMask");
+            PlayerNetworkState[] allPlayers = Object.FindObjectsByType<PlayerNetworkState>(FindObjectsInactive.Include);
+            for (int i = 0; i < allPlayers.Length; i++)
+            {
+                if (allPlayers[i] == null) continue;
+                Renderer[] rends = allPlayers[i].GetComponentsInChildren<Renderer>(true);
+                for (int r = 0; r < rends.Length; r++)
+                {
+                    if (rends[r].gameObject.layer != visionMaskLayer)
                     {
-                        weaponManager.ResetAllWeaponStates();
+                        rends[r].enabled = true;
                     }
                 }
-                Debug.Log($"[PlayerNetworkState] Local player ({Role}) in state {state} -> Tactical view attached to character. Movement and weapon firing enabled.");
+                Canvas[] canvases = allPlayers[i].GetComponentsInChildren<Canvas>(true);
+                for (int c = 0; c < canvases.Length; c++)
+                {
+                    canvases[c].enabled = true;
+                }
             }
         }
 
@@ -381,12 +480,19 @@ namespace HunterVsHider.Player
             var mainCam = UnityEngine.Camera.main;
             var fowPostProcess = mainCam != null ? mainCam.GetComponent<HunterVsHider.Vision.FoW_PostProcessFeature>() : null;
             
-            bool isLobbyPhase = HunterVsHider.Managers.MatchManager.Instance == null || 
-                               HunterVsHider.Managers.MatchManager.Instance.CurrentState == HunterVsHider.Managers.MatchState.WaitingForPlayers;
+            bool isNonCombat = HunterVsHider.Managers.MatchManager.Instance == null || 
+                               HunterVsHider.Managers.MatchManager.Instance.CurrentState == HunterVsHider.Managers.MatchState.WaitingForPlayers ||
+                               HunterVsHider.Managers.MatchManager.Instance.CurrentState == HunterVsHider.Managers.MatchState.PrepPhase ||
+                               HunterVsHider.Managers.MatchManager.Instance.CurrentState == HunterVsHider.Managers.MatchState.RoleAssignment;
 
             if (fowPostProcess != null)
             {
-                fowPostProcess.enabled = !isLobbyPhase;
+                fowPostProcess.enabled = !isNonCombat;
+            }
+
+            if (dynamicFov != null)
+            {
+                dynamicFov.isVisionMaskSuppressed = isNonCombat;
             }
 
             switch (currentRole.Value)

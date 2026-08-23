@@ -8,6 +8,7 @@ namespace HunterVsHider.Player
         public float viewRadius = 5f;
         [Range(0, 360)]
         public float viewAngle = 90f;
+        public bool isVisionMaskSuppressed { get; set; } = false;
 
         public void FindVisibleTargets()
         {

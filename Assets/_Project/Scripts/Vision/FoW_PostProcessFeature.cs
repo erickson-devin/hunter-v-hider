@@ -83,24 +83,15 @@ namespace HunterVsHider.Vision
         {
             var matchMgr = HunterVsHider.Managers.MatchManager.Instance ?? HunterVsHider.Managers.MatchManager.Singleton;
 
-            // 1. Lobby bypass: If MatchManager is in WaitingForPlayers (Lobby) state, disable FoW overlay
-            if (matchMgr == null || matchMgr.CurrentState == HunterVsHider.Managers.MatchState.WaitingForPlayers)
+            // 1. Non-combat states bypass (Lobby & PrepPhase): 
+            // In WaitingForPlayers (Lobby) or PrepPhase, disable Fog of War post-process overlay for all players
+            // so they have 100% full screen visibility with zero dark fog obstructions
+            if (matchMgr == null || 
+                matchMgr.CurrentState == HunterVsHider.Managers.MatchState.WaitingForPlayers ||
+                matchMgr.CurrentState == HunterVsHider.Managers.MatchState.PrepPhase)
             {
                 Graphics.Blit(source, destination);
                 return;
-            }
-
-            // 2. PrepPhase Asymmetrical Fog of War:
-            // - Assassin (God-View): Completely disable Fog of War overlay so the entire generated maze is crystal clear.
-            // - Police (Prep Zone): Fog of War remains strictly ENABLED, masking unrevealed areas and the combat arena.
-            if (matchMgr.CurrentState == HunterVsHider.Managers.MatchState.PrepPhase)
-            {
-                var localPlayer = GetLocalPlayerState();
-                if (localPlayer != null && localPlayer.Role == HunterVsHider.Player.PlayerRole.Assassin)
-                {
-                    Graphics.Blit(source, destination);
-                    return;
-                }
             }
 
             if (fowMaterial == null || fowShader == null)

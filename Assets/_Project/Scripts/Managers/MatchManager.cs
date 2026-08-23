@@ -606,6 +606,8 @@ namespace HunterVsHider.Managers
                 pwm.ResetAllWeaponStates();
             }
 
+            PlayerNetworkState.ForceEnableAllPlayerRenderers();
+
             Debug.Log($"[MatchManager] Local Client {playerState.OwnerClientId} ({playerState.Role}) executed PrepPhase teleport to {targetSpawn}");
         }
 
