@@ -181,17 +181,14 @@ namespace HunterVsHider.UI
             {
                 if (runtimeMaskMaterial == null)
                 {
-                    if (miniMapMaskMaterial != null)
+                    Shader shader = Shader.Find("UI/MiniMap_FoWOverlay") ?? Shader.Find("HunterVsHider/UI/MiniMap_FoWOverlay");
+                    if (shader != null)
+                    {
+                        runtimeMaskMaterial = new Material(shader);
+                    }
+                    else if (miniMapMaskMaterial != null)
                     {
                         runtimeMaskMaterial = new Material(miniMapMaskMaterial);
-                    }
-                    else
-                    {
-                        Shader shader = Shader.Find("HunterVsHider/UI/MiniMap_FoWOverlay") ?? Shader.Find("UI/MiniMap_FoWOverlay");
-                        if (shader != null)
-                        {
-                            runtimeMaskMaterial = new Material(shader);
-                        }
                     }
                 }
 
@@ -219,6 +216,8 @@ namespace HunterVsHider.UI
                 }
             }
         }
+
+        public void BindFoWMaterial(RenderTexture fowRT) => HandleFoWTextureReady(fowRT);
 
         /// <summary>
         /// Retrieves the local client's Fog of War render texture instance.
