@@ -408,16 +408,11 @@ namespace HunterVsHider.Map
             float halfThick = wallThickness * 0.5f;
 
             // =========================================================================
-            // PASS 0: CONTINUOUS OUTER PERIMETER BOUNDARY WALLS
+            // PASS 0: CONTINUOUS OUTER PERIMETER BOUNDARY WALLS & POLICE BREACH ROOMS
             // =========================================================================
             // North Boundary
             rawWalls.Add(new WallSegment(
                 new Vector3(0f, wallHeight * 0.5f, halfSize - halfThick),
-                new Vector3(mapSize, wallHeight, wallThickness)
-            ));
-            // South Boundary
-            rawWalls.Add(new WallSegment(
-                new Vector3(0f, wallHeight * 0.5f, -halfSize + halfThick),
                 new Vector3(mapSize, wallHeight, wallThickness)
             ));
             // West Boundary
@@ -430,6 +425,82 @@ namespace HunterVsHider.Map
                 new Vector3(halfSize - halfThick, wallHeight * 0.5f, 0f),
                 new Vector3(wallThickness, wallHeight, mapSize - (wallThickness * 2f))
             ));
+
+            // Procedural Police Breach Rooms along South perimeter (Z ≈ -25m for 50x50)
+            List<Vector3> breachPositions = GridManager.GetBreachSpawnPositions(mapSize);
+            List<string> breachNames = GridManager.GetBreachRoomNames(mapSize);
+
+            if (GridManager.Instance != null)
+            {
+                GridManager.Instance.RegisterBreachRooms(breachPositions, breachNames);
+            }
+
+            // South Perimeter Boundary with carved 1.5m doorways for each Breach Room
+            float doorWidth = 1.5f;
+            float halfDoor = doorWidth * 0.5f;
+            float roomWidth = 4.0f;
+            float roomDepth = 4.0f;
+            float halfRoomW = roomWidth * 0.5f;
+
+            // Sort breach centers ascending by X
+            List<float> breachXCoords = new List<float>();
+            foreach (var bPos in breachPositions)
+            {
+                breachXCoords.Add(bPos.x);
+            }
+            breachXCoords.Sort();
+
+            // 1. South perimeter boundary segments with 1.5m doorway openings
+            float currentX = -halfSize;
+            for (int b = 0; b < breachXCoords.Count; b++)
+            {
+                float bx = breachXCoords[b];
+                float doorLeft = bx - halfDoor;
+                float doorRight = bx + halfDoor;
+
+                // Wall segment from currentX to doorLeft
+                float segLen = doorLeft - currentX;
+                if (segLen > 0.05f)
+                {
+                    float segCenterX = (currentX + doorLeft) * 0.5f;
+                    rawWalls.Add(new WallSegment(
+                        new Vector3(segCenterX, wallHeight * 0.5f, -halfSize + halfThick),
+                        new Vector3(segLen, wallHeight, wallThickness)
+                    ));
+                }
+
+                currentX = doorRight;
+
+                // 2. Construct enclosed 4m x 4m Breach Room walls attached to South perimeter
+                // South wall of Breach Room
+                rawWalls.Add(new WallSegment(
+                    new Vector3(bx, wallHeight * 0.5f, -halfSize - roomDepth + halfThick),
+                    new Vector3(roomWidth, wallHeight, wallThickness)
+                ));
+
+                // West wall of Breach Room
+                rawWalls.Add(new WallSegment(
+                    new Vector3(bx - halfRoomW + halfThick, wallHeight * 0.5f, -halfSize - (roomDepth * 0.5f)),
+                    new Vector3(wallThickness, wallHeight, roomDepth)
+                ));
+
+                // East wall of Breach Room
+                rawWalls.Add(new WallSegment(
+                    new Vector3(bx + halfRoomW - halfThick, wallHeight * 0.5f, -halfSize - (roomDepth * 0.5f)),
+                    new Vector3(wallThickness, wallHeight, roomDepth)
+                ));
+            }
+
+            // Final south perimeter wall segment from last doorway to +halfSize
+            float finalSegLen = halfSize - currentX;
+            if (finalSegLen > 0.05f)
+            {
+                float segCenterX = (currentX + halfSize) * 0.5f;
+                rawWalls.Add(new WallSegment(
+                    new Vector3(segCenterX, wallHeight * 0.5f, -halfSize + halfThick),
+                    new Vector3(finalSegLen, wallHeight, wallThickness)
+                ));
+            }
 
             // =========================================================================
             // PASS 1: RANDOMIZED ROOM PACKING (DUAL PLACEMENT: CORRIDOR-BUFFERED & ADJACENT SUITES)
@@ -1862,6 +1933,13 @@ namespace HunterVsHider.Map
 
         public static Vector3 GetSafePoliceSpawnPosition(int index, int mapSize = 50)
         {
+            var breachPositions = GridManager.GetBreachSpawnPositions(mapSize);
+            if (breachPositions != null && breachPositions.Count > 0)
+            {
+                int safeIndex = Mathf.Abs(index) % breachPositions.Count;
+                return breachPositions[safeIndex];
+            }
+
             mapSize = ClampMapSize(mapSize);
             float southZ = -Mathf.Min(18f, (mapSize * 0.5f) - 6f);
             float offsetX = (index % 4) * 2.5f - 3.75f;

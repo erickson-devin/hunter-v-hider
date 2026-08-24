@@ -181,10 +181,28 @@ namespace HunterVsHider.Player
                         camFollow.SetTarget(null);
                         camFollow.ActivateAssassinGodView(mapSize);
                     }
+                    else
+                    {
+                        var mainCam = UnityEngine.Camera.main;
+                        if (mainCam != null)
+                        {
+                            mainCam.transform.position = new Vector3(0f, 35f, 0f);
+                            mainCam.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+                        }
+                    }
+
                     if (playerMovement != null) playerMovement.SetMovementEnabled(false);
                     if (playerController != null) playerController.enabled = false;
                     if (weaponManager != null) weaponManager.enabled = false;
-                    Debug.Log($"[PlayerNetworkState] Assassin entering PrepPhase -> Activated God-View Camera ({mapSize}x{mapSize}). Character targeting detached.");
+
+                    var placementController = GetComponent<AssassinPlacementController>();
+                    if (placementController == null)
+                    {
+                        placementController = gameObject.AddComponent<AssassinPlacementController>();
+                    }
+                    placementController.RefreshPlacementState();
+
+                    Debug.Log($"[PlayerNetworkState] Assassin entering PrepPhase -> Activated God-View Camera ({mapSize}x{mapSize}) at (0, 35, 0) with character tracking detached.");
                 }
                 else
                 {
@@ -199,8 +217,19 @@ namespace HunterVsHider.Player
                         weaponManager.enabled = true;
                         weaponManager.ResetAllWeaponStates();
                     }
+
+                    if (HunterVsHider.UI.PoliceBreachUI.Instance == null)
+                    {
+                        var breachUIObj = new GameObject("UI_PoliceBreach");
+                        breachUIObj.AddComponent<HunterVsHider.UI.PoliceBreachUI>();
+                    }
+                    else
+                    {
+                        HunterVsHider.UI.PoliceBreachUI.Instance.RefreshVisibility();
+                    }
+
                     ForceEnableAllPlayerRenderers();
-                    Debug.Log($"[PlayerNetworkState] Police in PrepPhase -> Tactical follow camera attached to Police staging area.");
+                    Debug.Log($"[PlayerNetworkState] Police in PrepPhase -> Tactical follow camera attached to Police staging area with Breach Room selection.");
                 }
             }
             else if (state == HunterVsHider.Managers.MatchState.CombatPhase)

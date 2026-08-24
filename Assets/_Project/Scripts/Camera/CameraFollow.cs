@@ -124,10 +124,10 @@ namespace HunterVsHider.Cameras
 
             if (isSkyViewActive)
             {
-                // Smoothly lerp position and rotation into Assassin God-View with unified mouse-lead support
-                Vector3 skyTargetPos = targetSkyPosition + currentLookAheadOffset;
-                transform.position = Vector3.Lerp(transform.position, skyTargetPos, transitionSpeed * Time.deltaTime);
-                transform.rotation = Quaternion.Slerp(transform.rotation, targetSkyRotation, transitionSpeed * Time.deltaTime);
+                target = null;
+                Vector3 skyTargetPos = new Vector3(godViewPanOffset.x, currentRequiredHeight, godViewPanOffset.z) + currentLookAheadOffset;
+                transform.position = skyTargetPos;
+                transform.rotation = targetSkyRotation;
             }
             else
             {
@@ -162,28 +162,19 @@ namespace HunterVsHider.Cameras
             if (cam == null) cam = GetComponent<UnityEngine.Camera>();
             if (cam == null) cam = UnityEngine.Camera.main;
 
-            float fov = (cam != null) ? cam.fieldOfView : 60f;
-            float aspect = (cam != null && cam.aspect > 0.01f) ? cam.aspect : (16f / 9f);
-
-            // Compute dynamic height to fit arena or provide optimal overhead perspective
-            float halfMap = mapSize * 0.5f;
-            float tanHalfFov = Mathf.Tan(fov * 0.5f * Mathf.Deg2Rad);
-
-            float verticalDist = halfMap / tanHalfFov;
-            float horizontalDist = halfMap / (aspect * tanHalfFov);
-
-            // Set camera height scaled to map size (minimum 25m)
-            currentRequiredHeight = Mathf.Max(25f, Mathf.Max(verticalDist, horizontalDist) * 1.05f);
+            currentRequiredHeight = 35f;
 
             if (cam != null && cam.orthographic)
             {
-                cam.orthographicSize = halfMap * 1.05f;
+                cam.orthographicSize = (mapSize * 0.5f) * 1.05f;
             }
 
             target = null;
             godViewPanOffset = Vector3.zero;
+            currentLookAheadOffset = Vector3.zero;
+            lookAheadVelocity = Vector3.zero;
 
-            Vector3 skyPos = new Vector3(0f, currentRequiredHeight, 0f);
+            Vector3 skyPos = new Vector3(0f, 35f, 0f);
             Quaternion skyRot = Quaternion.Euler(90f, 0f, 0f);
 
             transform.position = skyPos;
@@ -193,7 +184,7 @@ namespace HunterVsHider.Cameras
             targetSkyRotation = skyRot;
             isSkyViewActive = true;
 
-            Debug.Log($"[CameraFollow] Activated Assassin God-View -> MapSize: {mapSize}x{mapSize}, Height: {currentRequiredHeight:F1}m, WASD Pan Active.");
+            Debug.Log($"[CameraFollow] Activated Assassin God-View -> MapSize: {mapSize}x{mapSize}, Position: (0, 35, 0), Rotation: (90, 0, 0), Character tracking detached.");
         }
 
         public void ActivateAssassinSkyView(int mapSize) => ActivateAssassinGodView(mapSize);

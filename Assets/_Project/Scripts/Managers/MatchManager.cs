@@ -4,6 +4,7 @@ using Unity.Netcode;
 using UnityEngine;
 using HunterVsHider.Player;
 using HunterVsHider.Map;
+using HunterVsHider.UI;
 
 namespace HunterVsHider.Managers
 {
@@ -334,6 +335,81 @@ namespace HunterVsHider.Managers
             TransitionToCombatPhase();
         }
 
+        [Header("Asymmetric Spawning State")]
+        private readonly Dictionary<ulong, int> policeSelectedBreachRooms = new Dictionary<ulong, int>();
+        private Vector3 assassinCustomSpawnPosition = Vector3.zero;
+
+        /// <summary>
+        /// Server RPC allowing a Police player to select a tactical South Breach Room during PrepPhase.
+        /// Records the chosen breach room index without teleporting immediately so the officer stays in Zone_PolicePrep.
+        /// </summary>
+        [Rpc(SendTo.Server)]
+        public void SelectBreachRoomServerRpc(int roomIndex, RpcParams rpcParams = default)
+        {
+            ulong senderClientId = rpcParams.Receive.SenderClientId;
+            int mapSize = selectedMapSize.Value > 0 ? selectedMapSize.Value : 50;
+            var breachPositions = GridManager.GetBreachSpawnPositions(mapSize);
+            var breachNames = GridManager.GetBreachRoomNames(mapSize);
+
+            if (breachPositions == null || breachPositions.Count == 0) return;
+
+            int clampedIndex = Mathf.Clamp(roomIndex, 0, breachPositions.Count - 1);
+            policeSelectedBreachRooms[senderClientId] = clampedIndex;
+
+            string roomName = (clampedIndex < breachNames.Count) ? breachNames[clampedIndex] : $"Room {clampedIndex}";
+            Debug.Log($"[MatchManager] Server registered Police ClientId {senderClientId} breach selection: {roomName} (Physical teleportation deferred to CombatPhase start)");
+        }
+
+        /// <summary>
+        /// Server RPC allowing the Assassin to confirm custom drag-and-drop spawn coordinates during PrepPhase.
+        /// </summary>
+        [Rpc(SendTo.Server)]
+        public void ConfirmAssassinSpawnServerRpc(Vector3 spawnPos, RpcParams rpcParams = default)
+        {
+            ulong senderClientId = rpcParams.Receive.SenderClientId;
+            int mapSize = selectedMapSize.Value > 0 ? selectedMapSize.Value : 50;
+            float halfSize = mapSize * 0.5f;
+            float minAllowedZ = -halfSize + (mapSize * 0.70f);
+
+            // Server-side validation: must be within top 30% sector and within lateral bounds
+            if (spawnPos.z >= minAllowedZ && Mathf.Abs(spawnPos.x) <= halfSize)
+            {
+                assassinCustomSpawnPosition = new Vector3(spawnPos.x, 1.0f, spawnPos.z);
+                Debug.Log($"[MatchManager] Server confirmed Assassin ClientId {senderClientId} custom spawn position: {assassinCustomSpawnPosition}");
+            }
+            else
+            {
+                Debug.LogWarning($"[MatchManager] Rejected invalid Assassin spawn position {spawnPos} (Must have Z >= {minAllowedZ})");
+            }
+        }
+
+        public Vector3 GetAssassinSpawnPosition(int mapSize)
+        {
+            if (assassinCustomSpawnPosition != Vector3.zero)
+            {
+                return assassinCustomSpawnPosition;
+            }
+            return MapGenerator.GetSafeAssassinSpawnPosition(mapSize);
+        }
+
+        public Vector3 GetPoliceBreachSpawnPosition(ulong clientId, int fallbackIndex, int mapSize)
+        {
+            var breachPositions = GridManager.GetBreachSpawnPositions(mapSize);
+            if (breachPositions == null || breachPositions.Count == 0)
+            {
+                return MapGenerator.GetSafePoliceSpawnPosition(fallbackIndex, mapSize);
+            }
+
+            if (policeSelectedBreachRooms.TryGetValue(clientId, out int roomIndex))
+            {
+                int clamped = Mathf.Clamp(roomIndex, 0, breachPositions.Count - 1);
+                return breachPositions[clamped];
+            }
+
+            int defaultIndex = Mathf.Abs(fallbackIndex) % breachPositions.Count;
+            return breachPositions[defaultIndex];
+        }
+
         /// <summary>
         /// Server-only state controller that handles phase entry logic and transitions.
         /// </summary>
@@ -507,14 +583,14 @@ namespace HunterVsHider.Managers
 
                     if (playerState.Role == PlayerRole.Police)
                     {
-                        Vector3 targetSpawn = MapGenerator.GetSafePoliceSpawnPosition(policeCount, mapSize);
+                        Vector3 targetSpawn = GetPoliceBreachSpawnPosition(playerState.OwnerClientId, policeCount, mapSize);
                         playerState.ServerTeleport(targetSpawn, Quaternion.identity);
-                        Debug.Log($"[MatchManager] Teleported Police ClientId {playerState.OwnerClientId} to Combat Arena ({targetSpawn})");
+                        Debug.Log($"[MatchManager] Teleported Police ClientId {playerState.OwnerClientId} to Breach Room ({targetSpawn})");
                         policeCount++;
                     }
                     else if (playerState.Role == PlayerRole.Assassin)
                     {
-                        Vector3 targetSpawn = MapGenerator.GetSafeAssassinSpawnPosition(mapSize);
+                        Vector3 targetSpawn = GetAssassinSpawnPosition(mapSize);
                         playerState.ServerTeleport(targetSpawn, Quaternion.Euler(0f, 180f, 0f));
                         Debug.Log($"[MatchManager] Teleported Assassin ClientId {playerState.OwnerClientId} to Combat Arena ({targetSpawn})");
                     }
@@ -645,12 +721,29 @@ namespace HunterVsHider.Managers
 
             if (playerState.Role == PlayerRole.Police)
             {
-                targetSpawn = MapGenerator.GetSafePoliceSpawnPosition(0, mapSize);
+                int localBreachIndex = (PoliceBreachUI.Instance != null) ? PoliceBreachUI.Instance.SelectedRoomIndex : 0;
+                var breachPositions = GridManager.GetBreachSpawnPositions(mapSize);
+                if (breachPositions != null && breachPositions.Count > 0)
+                {
+                    int clamped = Mathf.Clamp(localBreachIndex, 0, breachPositions.Count - 1);
+                    targetSpawn = breachPositions[clamped];
+                }
+                else
+                {
+                    targetSpawn = MapGenerator.GetSafePoliceSpawnPosition(0, mapSize);
+                }
                 targetRot = Quaternion.identity;
             }
             else if (playerState.Role == PlayerRole.Assassin)
             {
-                targetSpawn = MapGenerator.GetSafeAssassinSpawnPosition(mapSize);
+                if (AssassinPlacementController.Instance != null && AssassinPlacementController.Instance.HasConfirmedSpawn)
+                {
+                    targetSpawn = AssassinPlacementController.Instance.ConfirmedSpawnPosition;
+                }
+                else
+                {
+                    targetSpawn = GetAssassinSpawnPosition(mapSize);
+                }
                 targetRot = Quaternion.Euler(0f, 180f, 0f);
             }
             else
