@@ -159,6 +159,9 @@ namespace HunterVsHider.Weapons
         {
             if (isReloading) return;
 
+            var health = GetComponentInParent<HunterVsHider.Player.HealthComponent>();
+            if (health != null && !health.IsAlive.Value) return;
+
             WeaponType wType = (weaponData != null) ? weaponData.weaponType : WeaponType.Firearm;
 
             switch (wType)
@@ -190,7 +193,7 @@ namespace HunterVsHider.Weapons
 
             float range = (weaponData != null) ? weaponData.meleeRange : 1.8f;
             float arcAngle = (weaponData != null) ? weaponData.meleeArcAngle : 90.0f;
-            float dmg = (weaponData != null) ? weaponData.damage : 50.0f;
+            float dmg = (weaponData != null) ? weaponData.baseDamage : 100.0f; // Assassin 100 HP Melee
 
             Vector3 origin = (muzzlePoint != null) ? muzzlePoint.position : transform.position;
             Vector3 forward = transform.root.forward;
@@ -208,14 +211,17 @@ namespace HunterVsHider.Weapons
 
                 if (toTarget.magnitude <= 0.05f || Vector3.Angle(forward, toTarget.normalized) <= arcAngle * 0.5f)
                 {
-                    IDamageable damageable = col.GetComponent<IDamageable>();
-                    if (damageable == null) damageable = col.GetComponentInParent<IDamageable>();
-
-                    if (damageable != null)
+                    if (col.TryGetComponent<HunterVsHider.Player.HealthComponent>(out var targetHealth))
                     {
-                        damageable.TakeDamage(dmg);
+                        targetHealth.TakeDamageServerRpc(dmg);
                         hitAny = true;
                         Debug.Log($"[Weapon] Melee Slash hit {col.gameObject.name} for {dmg} damage.");
+                    }
+                    else if (col.GetComponentInParent<HunterVsHider.Player.HealthComponent>() is var parentHealth && parentHealth != null)
+                    {
+                        parentHealth.TakeDamageServerRpc(dmg);
+                        hitAny = true;
+                        Debug.Log($"[Weapon] Melee Slash hit parent {col.gameObject.name} for {dmg} damage.");
                     }
                 }
             }
@@ -228,7 +234,7 @@ namespace HunterVsHider.Weapons
 
         protected virtual void ExecuteThrowableLaunch()
         {
-            if (currentAmmo <= 0)
+            if (currentAmmo <= 0 && MaxAmmo > 0)
             {
                 if (dryFireSFX != null && audioSource != null)
                 {
@@ -237,52 +243,43 @@ namespace HunterVsHider.Weapons
                 return;
             }
 
-            float rate = (weaponData != null) ? weaponData.fireRate : 0.4f;
+            float rate = (weaponData != null) ? weaponData.fireRate : 0.5f;
             if (Time.time < nextTimeToFire) return;
             nextTimeToFire = Time.time + rate;
 
-            currentAmmo--;
-
             if (fireSFX != null && audioSource != null)
             {
-                audioSource.PlayOneShot(fireSFX, 0.7f);
+                audioSource.PlayOneShot(fireSFX, 0.8f);
             }
 
-            Vector3 spawnPos = (muzzlePoint != null) ? muzzlePoint.position : (transform.position + transform.root.forward * 0.5f);
-            Vector3 spawnDir = transform.root.forward;
-
-            GameObject prefab = (weaponData != null && weaponData.projectilePrefab != null) ? weaponData.projectilePrefab : null;
-
-            if (prefab != null)
+            if (!IsInfiniteAmmo && MaxAmmo > 0)
             {
-                GameObject projObj = Instantiate(prefab, spawnPos, Quaternion.LookRotation(spawnDir));
-                var knife = projObj.GetComponent<ThrowingKnife>();
-                if (knife != null)
-                {
-                    float speed = (weaponData != null) ? weaponData.projectileSpeed : 22.0f;
-                    float dmg = (weaponData != null) ? weaponData.damage : 75.0f;
-                    knife.Launch(spawnDir, speed, dmg);
-                }
+                currentAmmo--;
             }
-            else
-            {
-                // Fallback procedural projectile
-                GameObject primitiveKnife = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                primitiveKnife.name = "Procedural_ThrowingKnife";
-                primitiveKnife.transform.position = spawnPos;
-                primitiveKnife.transform.localScale = new Vector3(0.08f, 0.08f, 0.4f);
-                primitiveKnife.transform.forward = spawnDir;
 
-                var tk = primitiveKnife.AddComponent<ThrowingKnife>();
-                float speed = (weaponData != null) ? weaponData.projectileSpeed : 22.0f;
-                float dmg = (weaponData != null) ? weaponData.damage : 75.0f;
-                tk.Launch(spawnDir, speed, dmg);
+            GameObject prefab = (weaponData != null) ? weaponData.projectilePrefab : null;
+            if (prefab == null)
+            {
+                Debug.LogWarning($"[Weapon] No projectilePrefab assigned on Throwable WeaponData: {name}");
+                return;
+            }
+
+            Vector3 origin = (muzzlePoint != null) ? muzzlePoint.position : transform.position;
+            Vector3 forward = transform.root.forward;
+            float speed = (weaponData != null) ? weaponData.projectileSpeed : 22.0f;
+            float dmg = (weaponData != null) ? weaponData.baseDamage : 10.0f; // Throwing Knife 10 HP
+
+            GameObject proj = Instantiate(prefab, origin, Quaternion.LookRotation(forward));
+            ThrowingKnife knife = proj.GetComponent<ThrowingKnife>();
+            if (knife != null)
+            {
+                knife.Launch(forward, speed, dmg);
             }
         }
 
         protected virtual void ExecuteFirearmShot()
         {
-            if (currentAmmo <= 0)
+            if (currentAmmo <= 0 && MaxAmmo > 0)
             {
                 if (dryFireSFX != null && audioSource != null)
                 {
@@ -295,35 +292,45 @@ namespace HunterVsHider.Weapons
             if (Time.time < nextTimeToFire) return;
             nextTimeToFire = Time.time + rate;
 
-            currentAmmo--;
-
-            AudioClip clip = FireSFX;
-            if (clip == null)
+            // Audio
+            if (fireSFX != null && audioSource != null)
             {
-                InitializeAudio();
-                clip = FireSFX;
+                audioSource.PlayOneShot(fireSFX, 0.8f);
             }
 
-            if (clip != null)
+            if (!IsInfiniteAmmo && MaxAmmo > 0)
             {
-                if (audioSource != null && audioSource.enabled && gameObject.activeInHierarchy)
-                {
-                    audioSource.PlayOneShot(clip, 1.0f);
-                }
-                else
-                {
-                    Vector3 soundPos = (muzzlePoint != null) ? muzzlePoint.position : transform.position;
-                    AudioSource.PlayClipAtPoint(clip, soundPos, 1.0f);
-                }
+                currentAmmo--;
             }
 
-            float range = (weaponData != null) ? weaponData.range : 50.0f;
-            float dmg = (weaponData != null) ? weaponData.damage : 25.0f;
+            float range = (weaponData != null) ? weaponData.maxRange : 30.0f;
+            float baseDmg = (weaponData != null) ? weaponData.baseDamage : 20.0f;
+            bool requiresLOS = (weaponData != null) ? weaponData.requiresLineOfSightMultiplier : true;
             int pelletCount = (weaponData != null) ? Mathf.Max(1, weaponData.pellets) : 1;
             float spreadAngle = (weaponData != null) ? weaponData.spreadAngle : 0.0f;
 
             Vector3 origin = (muzzlePoint != null) ? muzzlePoint.position : transform.position;
             Vector3 forward = (muzzlePoint != null) ? muzzlePoint.forward : transform.forward;
+
+            // Capture 2D aim vector toward mouse cursor world position
+            Vector3 aimDirection = forward;
+            aimDirection.y = 0f;
+
+            if (Camera.main != null)
+            {
+                Ray mouseRay = Camera.main.ScreenPointToRay(Input.mousePosition);
+                Plane groundPlane = new Plane(Vector3.up, new Vector3(0f, 0.5f, 0f));
+                if (groundPlane.Raycast(mouseRay, out float enter))
+                {
+                    Vector3 mouseWorldPosition = mouseRay.GetPoint(enter);
+                    Vector3 calculatedAim = (mouseWorldPosition - origin).normalized;
+                    calculatedAim.y = 0f;
+                    if (calculatedAim.sqrMagnitude > 0.001f)
+                    {
+                        aimDirection = calculatedAim.normalized;
+                    }
+                }
+            }
 
             int layerMask = ~LayerMask.GetMask("Ignore Raycast", "UI");
 
@@ -344,12 +351,23 @@ namespace HunterVsHider.Weapons
                         AudioSource.PlayClipAtPoint(impactSFX, hit.point, 0.6f);
                     }
 
-                    IDamageable damageable = hit.collider.GetComponent<IDamageable>();
-                    if (damageable == null) damageable = hit.collider.GetComponentInParent<IDamageable>();
-
-                    if (damageable != null)
+                    // If raycast hits Layer 7 (Obstacle), play impact and terminate
+                    if (hit.collider.gameObject.layer == 7 || hit.collider.CompareTag("Obstacle"))
                     {
-                        damageable.TakeDamage(dmg);
+                        Debug.DrawRay(origin, hit.point - origin, Color.gray, 2.0f);
+                        continue;
+                    }
+
+                    // Check for HealthComponent on target or parent
+                    HunterVsHider.Player.HealthComponent targetHealth = hit.collider.GetComponent<HunterVsHider.Player.HealthComponent>();
+                    if (targetHealth == null)
+                    {
+                        targetHealth = hit.collider.GetComponentInParent<HunterVsHider.Player.HealthComponent>();
+                    }
+
+                    if (targetHealth != null && targetHealth.gameObject != transform.root.gameObject)
+                    {
+                        targetHealth.TakeDamageServerRpc(baseDmg);
                     }
 
                     Debug.DrawRay(origin, hit.point - origin, Color.red, 2.0f);

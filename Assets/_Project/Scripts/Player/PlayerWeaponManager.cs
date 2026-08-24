@@ -100,12 +100,15 @@ namespace HunterVsHider.Player
             WeaponData knifeData = ScriptableObject.CreateInstance<WeaponData>();
             knifeData.weaponName = "Slash Knife";
             knifeData.weaponType = WeaponType.Melee;
-            knifeData.damage = 50f;
+            knifeData.baseDamage = 100f; // Assassin Melee 100 HP
+            knifeData.damage = 100f;
             knifeData.meleeRange = 1.8f;
+            knifeData.maxRange = 1.8f;
             knifeData.meleeArcAngle = 90f;
             knifeData.fireRate = 0.5f;
             knifeData.viewAngle = 360f;
             knifeData.viewDistance = 12f;
+            knifeData.requiresLineOfSightMultiplier = false;
             knifeData.isInfiniteAmmo = true;
             knifeData.canReload = false;
             slashKnife.weaponData = knifeData;
@@ -128,12 +131,16 @@ namespace HunterVsHider.Player
             WeaponData throwData = ScriptableObject.CreateInstance<WeaponData>();
             throwData.weaponName = "Throwing Knives";
             throwData.weaponType = WeaponType.Throwable;
-            throwData.damage = 75f;
+            throwData.baseDamage = 10f; // Throwing Knife 10 HP
+            throwData.damage = 10f;
+            throwData.maxRange = 15f;
+            throwData.range = 15f;
             throwData.projectileSpeed = 22.0f;
             throwData.fireRate = 0.4f;
             throwData.maxAmmo = 25;
             throwData.viewAngle = 360f;
             throwData.viewDistance = 12f;
+            throwData.requiresLineOfSightMultiplier = false;
             throwData.isInfiniteAmmo = false;
             throwData.canReload = false;
             throwingKnives.weaponData = throwData;
@@ -142,12 +149,17 @@ namespace HunterVsHider.Player
             weaponSlots[1] = throwingKnives;
             weaponSlots[2] = null;
 
-            Debug.Log("[PlayerWeaponManager] Configured Assassin Loadout: Slot 0 (Slash Knife), Slot 1 (Throwing Knives x25).");
+            Debug.Log("[PlayerWeaponManager] Configured Assassin Loadout: Slot 0 (Slash Knife - 100 HP), Slot 1 (Throwing Knives - 10 HP x25).");
         }
 
         private void SetupPoliceWeapons(Transform holder)
         {
-            weaponSlots = new Weapon[3];
+            weaponSlots = CreatePoliceWeaponSlots(holder);
+        }
+
+        private Weapon[] CreatePoliceWeaponSlots(Transform holder)
+        {
+            Weapon[] slots = new Weapon[3];
 
             // 1. Slot 0 (Key 1): Tactical Rifle (Narrow beam, Long range)
             Transform rifleTrans = holder.Find("Gun_Rifle");
@@ -165,20 +177,23 @@ namespace HunterVsHider.Player
             WeaponData rifleData = ScriptableObject.CreateInstance<WeaponData>();
             rifleData.weaponName = "Tactical Rifle";
             rifleData.weaponType = WeaponType.Firearm;
-            rifleData.damage = 28f;
-            rifleData.range = 50f;
+            rifleData.baseDamage = 20f; // Police Gun 20 HP
+            rifleData.damage = 20f;
+            rifleData.maxRange = 30f;
+            rifleData.range = 30f;
             rifleData.fireRate = 0.12f;
             rifleData.maxAmmo = 30;
             rifleData.reloadTime = 2.0f;
             rifleData.viewAngle = 45.0f;
             rifleData.viewDistance = 24.0f;
+            rifleData.requiresLineOfSightMultiplier = true;
             rifleData.isInfiniteReserve = true;
             rifleData.canReload = true;
             rifle.weaponData = rifleData;
             rifle.InitializeAudio();
             rifle.InitializeAmmo();
 
-            weaponSlots[0] = rifle;
+            slots[0] = rifle;
 
             // 2. Slot 1 (Key 2): Combat Shotgun (Flood light, CQC Wide spread)
             Transform shotgunTrans = holder.Find("Gun_Shotgun");
@@ -196,22 +211,24 @@ namespace HunterVsHider.Player
             WeaponData shotgunData = ScriptableObject.CreateInstance<WeaponData>();
             shotgunData.weaponName = "Combat Shotgun";
             shotgunData.weaponType = WeaponType.Firearm;
-            shotgunData.damage = 12f; // 8 pellets * 12 dmg = 96 total
-            shotgunData.pellets = 8;
-            shotgunData.spreadAngle = 10.0f;
+            shotgunData.baseDamage = 20f; // 20 HP
+            shotgunData.damage = 20f;
+            shotgunData.pellets = 1;
+            shotgunData.maxRange = 30f;
             shotgunData.range = 30f;
             shotgunData.fireRate = 0.7f;
             shotgunData.maxAmmo = 8;
             shotgunData.reloadTime = 2.5f;
             shotgunData.viewAngle = 110.0f;
             shotgunData.viewDistance = 10.0f;
+            shotgunData.requiresLineOfSightMultiplier = true;
             shotgunData.isInfiniteReserve = true;
             shotgunData.canReload = true;
             shotgun.weaponData = shotgunData;
             shotgun.InitializeAudio();
             shotgun.InitializeAmmo();
 
-            weaponSlots[1] = shotgun;
+            slots[1] = shotgun;
 
             // 3. Slot 2 (Key 3): Pistol (Balanced tactical cone)
             Transform pistolTrans = holder.Find("Gun_Pistol");
@@ -229,24 +246,49 @@ namespace HunterVsHider.Player
             WeaponData pistolData = ScriptableObject.CreateInstance<WeaponData>();
             pistolData.weaponName = "Pistol";
             pistolData.weaponType = WeaponType.Firearm;
-            pistolData.damage = 22f;
-            pistolData.range = 35f;
+            pistolData.baseDamage = 20f; // 20 HP
+            pistolData.damage = 20f;
+            pistolData.maxRange = 30f;
+            pistolData.range = 30f;
             pistolData.fireRate = 0.22f;
             pistolData.maxAmmo = 15;
             pistolData.reloadTime = 1.4f;
             pistolData.viewAngle = 75.0f;
             pistolData.viewDistance = 16.0f;
+            pistolData.requiresLineOfSightMultiplier = true;
             pistolData.isInfiniteReserve = true;
             pistolData.canReload = true;
             pistol.weaponData = pistolData;
             pistol.InitializeAudio();
             pistol.InitializeAmmo();
 
-            weaponSlots[2] = pistol;
+            slots[2] = pistol;
 
+            weaponSlots = slots;
             ResetAllWeaponStates();
 
-            Debug.Log("[PlayerWeaponManager] Configured Police God-Tier Loadout: Slot 0 (Rifle - 45 deg / 24m), Slot 1 (Shotgun - 110 deg / 10m), Slot 2 (Pistol - 75 deg / 16m).");
+            Debug.Log("[PlayerWeaponManager] Configured Police Loadout: Slot 0 (Rifle - 20 HP / 30m), Slot 1 (Shotgun - 20 HP / 30m), Slot 2 (Pistol - 20 HP / 30m).");
+            return slots;
+        }
+
+        public void HideAllWeaponVisuals()
+        {
+            if (weaponSlots == null) return;
+            for (int i = 0; i < weaponSlots.Length; i++)
+            {
+                if (weaponSlots[i] != null)
+                {
+                    weaponSlots[i].gameObject.SetActive(false);
+                }
+            }
+        }
+
+        public void ShowActiveWeaponVisual()
+        {
+            if (activeWeapon != null)
+            {
+                activeWeapon.gameObject.SetActive(true);
+            }
         }
 
         /// <summary>
@@ -271,6 +313,10 @@ namespace HunterVsHider.Player
 
         private void Update()
         {
+            // If dead, block all weapon input
+            var health = GetComponent<HealthComponent>();
+            if (health != null && !health.IsAlive.Value) return;
+
             // If networked, only accept input from the owning client
             var netObj = GetComponent<Unity.Netcode.NetworkObject>();
             if (netObj != null && netObj.IsSpawned && !netObj.IsOwner) return;

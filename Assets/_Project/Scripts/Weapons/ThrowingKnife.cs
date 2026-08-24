@@ -70,10 +70,17 @@ namespace HunterVsHider.Weapons
 
             GameObject hitObj = collision.gameObject;
 
-            // Check for IDamageable (Player / Enemy)
-            IDamageable damageable = hitObj.GetComponent<IDamageable>();
-            if (damageable == null) damageable = hitObj.GetComponentInParent<IDamageable>();
+            // Check for HealthComponent / IDamageable (Player / Enemy)
+            var health = hitObj.GetComponent<HunterVsHider.Player.HealthComponent>() ?? hitObj.GetComponentInParent<HunterVsHider.Player.HealthComponent>();
+            if (health != null)
+            {
+                health.TakeDamageServerRpc(damage);
+                StickToTarget(collision.transform, collision.contacts[0].point);
+                PlayImpactAudio();
+                return;
+            }
 
+            IDamageable damageable = hitObj.GetComponent<IDamageable>() ?? hitObj.GetComponentInParent<IDamageable>();
             if (damageable != null)
             {
                 damageable.TakeDamage(damage);
@@ -96,9 +103,16 @@ namespace HunterVsHider.Weapons
         {
             if (hasStuck) return;
 
-            IDamageable damageable = other.GetComponent<IDamageable>();
-            if (damageable == null) damageable = other.GetComponentInParent<IDamageable>();
+            var health = other.GetComponent<HunterVsHider.Player.HealthComponent>() ?? other.GetComponentInParent<HunterVsHider.Player.HealthComponent>();
+            if (health != null)
+            {
+                health.TakeDamageServerRpc(damage);
+                StickToTarget(other.transform, transform.position);
+                PlayImpactAudio();
+                return;
+            }
 
+            IDamageable damageable = other.GetComponent<IDamageable>() ?? other.GetComponentInParent<IDamageable>();
             if (damageable != null)
             {
                 damageable.TakeDamage(damage);

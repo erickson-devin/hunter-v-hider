@@ -17,14 +17,23 @@ namespace HunterVsHider.Weapons
         public WeaponType weaponType = WeaponType.Firearm;
 
         [Header("Combat Stats")]
-        [Tooltip("Damage applied per hit/projectile.")]
-        public float damage = 25f;
+        [Tooltip("Base damage applied per hit/projectile (Police Guns = 20, Assassin Melee = 100, Knife = 10).")]
+        public float baseDamage = 20f;
 
-        [Tooltip("Effective maximum range for firearms.")]
-        public float range = 50f;
+        [Tooltip("Damage applied per hit/projectile (backward compatibility alias).")]
+        public float damage = 20f;
 
-        [Tooltip("Attack cooldown interval in seconds (e.g. 0.5s for melee swing).")]
-        public float fireRate = 0.2f;
+        [Tooltip("Effective maximum range in meters (Guns = 30m, Melee = 1.8m, Knife = 15m).")]
+        public float maxRange = 30f;
+
+        [Tooltip("Effective maximum range for firearms (backward compatibility alias).")]
+        public float range = 30f;
+
+        [Tooltip("Attack cooldown interval in seconds (e.g. 0.15s for guns, 0.5s for melee).")]
+        public float fireRate = 0.15f;
+
+        [Tooltip("If true, damage is halved (50% blind fire) when firing at targets outside active FOV cone.")]
+        public bool requiresLineOfSightMultiplier = true;
 
         [Header("Shotgun Pellet Spread")]
         [Tooltip("Number of raycast pellets fired per shot (1 for Rifle/Pistol, 8 for Shotgun).")]
