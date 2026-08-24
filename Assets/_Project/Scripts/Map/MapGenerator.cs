@@ -629,6 +629,12 @@ namespace HunterVsHider.Map
             SortWalls(mergedWalls);
 
             InstantiateWallGeometry(mergedWalls, seed, mapSize, rooms.Count);
+
+            // Construct explicit Breach Room containers and child spawn points in hierarchy
+            if (GridManager.Instance != null)
+            {
+                GridManager.Instance.ConstructBreachRoomSpawnHierarchy(mapSize);
+            }
         }
 
         #endregion

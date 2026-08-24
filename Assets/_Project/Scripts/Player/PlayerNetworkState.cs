@@ -11,6 +11,8 @@ namespace HunterVsHider.Player
     }
 
     [RequireComponent(typeof(NetworkObject))]
+    [RequireComponent(typeof(HealthComponent))]
+    [RequireComponent(typeof(HunterVsHider.UI.PlayerHUD))]
     public class PlayerNetworkState : NetworkBehaviour
     {
         [Header("Role State")]
@@ -636,6 +638,9 @@ namespace HunterVsHider.Player
 
         public void ApplyTeleport(Vector3 targetPosition, Quaternion targetRotation)
         {
+            var cc = GetComponent<CharacterController>();
+            if (cc != null) cc.enabled = false;
+
             transform.position = targetPosition;
             transform.rotation = targetRotation;
 
@@ -655,6 +660,8 @@ namespace HunterVsHider.Player
             }
 
             Physics.SyncTransforms();
+
+            if (cc != null) cc.enabled = true;
 
             Debug.Log($"[PlayerNetworkState] ClientId {OwnerClientId} successfully teleported to {targetPosition}");
         }
