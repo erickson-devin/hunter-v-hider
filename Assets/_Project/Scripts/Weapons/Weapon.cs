@@ -257,24 +257,24 @@ namespace HunterVsHider.Weapons
                 currentAmmo--;
             }
 
-            GameObject prefab = (weaponData != null) ? weaponData.projectilePrefab : null;
-            if (prefab == null)
-            {
-                Debug.LogWarning($"[Weapon] No projectilePrefab assigned on Throwable WeaponData: {name}");
-                return;
-            }
-
             Vector3 origin = (muzzlePoint != null) ? muzzlePoint.position : transform.position;
             Vector3 forward = transform.root.forward;
-            float speed = (weaponData != null) ? weaponData.projectileSpeed : 22.0f;
-            float dmg = (weaponData != null) ? weaponData.baseDamage : 10.0f; // Throwing Knife 10 HP
 
-            GameObject proj = Instantiate(prefab, origin, Quaternion.LookRotation(forward));
-            ThrowingKnife knife = proj.GetComponent<ThrowingKnife>();
-            if (knife != null)
+            var weaponMgr = GetComponentInParent<HunterVsHider.Player.PlayerWeaponManager>();
+            if (weaponMgr != null)
             {
-                knife.Launch(forward, speed, dmg);
+                weaponMgr.ExecuteThrowingKnifeRaycastServerRpc(origin, forward);
             }
+            else
+            {
+                var assassinMgr = GetComponentInParent<HunterVsHider.Weapons.AssassinWeaponManager>();
+                if (assassinMgr != null)
+                {
+                    assassinMgr.ExecuteThrowingKnifeRaycastServerRpc(origin, forward);
+                }
+            }
+
+            Debug.DrawRay(origin, forward * ((weaponData != null) ? weaponData.maxRange : 15.0f), Color.yellow, 1.0f);
         }
 
         protected virtual void ExecuteFirearmShot()
