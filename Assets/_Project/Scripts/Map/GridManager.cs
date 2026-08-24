@@ -56,35 +56,39 @@ namespace HunterVsHider.Map
         }
 
         /// <summary>
-        /// Calculates the procedural 4m x 4m Breach Room center coordinates along the South perimeter (Z ≈ -25m).
+        /// Calculates the procedural 8m x 6m Breach Room center coordinates along the South perimeter (Z ≈ -halfSize - 3m).
+        /// Scaling rules:
+        /// - 50x50: 2 rooms (Alpha at -12m, Bravo at +12m)
+        /// - 100x100: 3 rooms (Alpha at -25m, Bravo at 0m, Charlie at +25m)
+        /// - 150x150: 4 rooms (Alpha at -45m, Bravo at -15m, Charlie at +15m, Delta at +45m)
         /// </summary>
         public static List<Vector3> GetBreachSpawnPositions(int mapSize = 50)
         {
             int size = MapGenerator.ClampMapSize(mapSize);
             float halfSize = size * 0.5f;
-            float roomZ = -halfSize - 2.0f; // 2m south of perimeter wall, centered inside 4m deep room
+            float roomZ = -halfSize - 3.0f; // 3m south of perimeter wall, centered inside 6m deep room
 
             List<Vector3> positions = new List<Vector3>();
 
             if (size == 50)
             {
-                // 3 Breach Rooms across 50m arena: Alpha (-15m), Bravo (0m), Charlie (+15m)
-                positions.Add(new Vector3(-15.0f, 1.0f, roomZ));
-                positions.Add(new Vector3(0.0f, 1.0f, roomZ));
-                positions.Add(new Vector3(15.0f, 1.0f, roomZ));
+                // 2 Breach Rooms across 50m arena: Alpha (-12m), Bravo (+12m)
+                positions.Add(new Vector3(-12.0f, 1.0f, roomZ));
+                positions.Add(new Vector3(12.0f, 1.0f, roomZ));
             }
             else if (size == 100)
             {
-                // 3 Breach Rooms across 100m arena: Alpha (-30m), Bravo (0m), Charlie (+30m)
-                positions.Add(new Vector3(-30.0f, 1.0f, roomZ));
+                // 3 Breach Rooms across 100m arena: Alpha (-25m), Bravo (0m), Charlie (+25m)
+                positions.Add(new Vector3(-25.0f, 1.0f, roomZ));
                 positions.Add(new Vector3(0.0f, 1.0f, roomZ));
-                positions.Add(new Vector3(30.0f, 1.0f, roomZ));
+                positions.Add(new Vector3(25.0f, 1.0f, roomZ));
             }
             else // 150
             {
-                // 3 Breach Rooms across 150m arena: Alpha (-45m), Bravo (0m), Charlie (+45m)
+                // 4 Breach Rooms across 150m arena: Alpha (-45m), Bravo (-15m), Charlie (+15m), Delta (+45m)
                 positions.Add(new Vector3(-45.0f, 1.0f, roomZ));
-                positions.Add(new Vector3(0.0f, 1.0f, roomZ));
+                positions.Add(new Vector3(-15.0f, 1.0f, roomZ));
+                positions.Add(new Vector3(15.0f, 1.0f, roomZ));
                 positions.Add(new Vector3(45.0f, 1.0f, roomZ));
             }
 
@@ -92,16 +96,79 @@ namespace HunterVsHider.Map
         }
 
         /// <summary>
-        /// Returns tactical callsign labels for the available breach rooms.
+        /// Returns tactical callsign labels for the available breach rooms matching the map tier.
         /// </summary>
         public static List<string> GetBreachRoomNames(int mapSize = 50)
         {
-            return new List<string>
+            int size = MapGenerator.ClampMapSize(mapSize);
+            if (size == 50)
             {
-                "Breach Alpha",
-                "Breach Bravo",
-                "Breach Charlie"
-            };
+                return new List<string>
+                {
+                    "Breach Alpha",
+                    "Breach Bravo"
+                };
+            }
+            else if (size == 100)
+            {
+                return new List<string>
+                {
+                    "Breach Alpha",
+                    "Breach Bravo",
+                    "Breach Charlie"
+                };
+            }
+            else // 150
+            {
+                return new List<string>
+                {
+                    "Breach Alpha",
+                    "Breach Bravo",
+                    "Breach Charlie",
+                    "Breach Delta"
+                };
+            }
+        }
+
+        /// <summary>
+        /// Generates a 3x3 multi-player spawn grid (9 distinct node positions) in the southern pocket behind the privacy baffle:
+        /// SpawnPos(r, c) = RoomCenter + Vector3((c - 1) * 1.5m, 0, (r - 1) * 1.5m - 1.0m)
+        /// where r, c in {0, 1, 2}.
+        /// </summary>
+        public static List<Vector3> GetBreachRoomSpawnArray(int roomIndex, int mapSize = 50)
+        {
+            var roomCenters = GetBreachSpawnPositions(mapSize);
+            if (roomCenters == null || roomCenters.Count == 0)
+            {
+                return new List<Vector3> { new Vector3(0f, 1f, -(mapSize * 0.5f) - 3.0f) };
+            }
+
+            int clampedRoomIndex = Mathf.Clamp(roomIndex, 0, roomCenters.Count - 1);
+            Vector3 center = roomCenters[clampedRoomIndex];
+
+            List<Vector3> spawnArray = new List<Vector3>(9);
+            for (int r = 0; r < 3; r++)
+            {
+                for (int c = 0; c < 3; c++)
+                {
+                    float offsetX = (c - 1) * 1.5f;
+                    float offsetZ = (r - 1) * 1.5f - 1.0f;
+                    spawnArray.Add(new Vector3(center.x + offsetX, 1.0f, center.z + offsetZ));
+                }
+            }
+
+            return spawnArray;
+        }
+
+        /// <summary>
+        /// Returns a specific spawn coordinate from the room's 3x3 node array based on the squad slot index.
+        /// </summary>
+        public static Vector3 GetBreachSpawnPosition(int roomIndex, int slotIndex, int mapSize = 50)
+        {
+            var spawns = GetBreachRoomSpawnArray(roomIndex, mapSize);
+            if (spawns == null || spawns.Count == 0) return new Vector3(0f, 1f, -(mapSize * 0.5f) - 3.0f);
+            int clampedSlot = Mathf.Abs(slotIndex) % spawns.Count;
+            return spawns[clampedSlot];
         }
 
         /// <summary>

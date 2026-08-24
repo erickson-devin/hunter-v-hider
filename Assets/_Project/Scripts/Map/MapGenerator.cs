@@ -438,9 +438,11 @@ namespace HunterVsHider.Map
             // South Perimeter Boundary with carved 1.5m doorways for each Breach Room
             float doorWidth = 1.5f;
             float halfDoor = doorWidth * 0.5f;
-            float roomWidth = 4.0f;
-            float roomDepth = 4.0f;
+            float roomWidth = 8.0f;
+            float roomDepth = 6.0f;
             float halfRoomW = roomWidth * 0.5f;
+            float baffleWidth = 4.5f;
+            float baffleOffsetSouth = 1.5f;
 
             // Sort breach centers ascending by X
             List<float> breachXCoords = new List<float>();
@@ -471,8 +473,8 @@ namespace HunterVsHider.Map
 
                 currentX = doorRight;
 
-                // 2. Construct enclosed 4m x 4m Breach Room walls attached to South perimeter
-                // South wall of Breach Room
+                // 2. Construct enclosed 8m x 6m Breach Room outer walls attached to South perimeter
+                // South wall of Breach Room (outer bottom boundary)
                 rawWalls.Add(new WallSegment(
                     new Vector3(bx, wallHeight * 0.5f, -halfSize - roomDepth + halfThick),
                     new Vector3(roomWidth, wallHeight, wallThickness)
@@ -488,6 +490,12 @@ namespace HunterVsHider.Map
                 rawWalls.Add(new WallSegment(
                     new Vector3(bx + halfRoomW - halfThick, wallHeight * 0.5f, -halfSize - (roomDepth * 0.5f)),
                     new Vector3(wallThickness, wallHeight, roomDepth)
+                ));
+
+                // 3. Internal 4.5m Privacy Baffle Wall offset 1.5m South of North doorway
+                rawWalls.Add(new WallSegment(
+                    new Vector3(bx, wallHeight * 0.5f, -halfSize - baffleOffsetSouth),
+                    new Vector3(baffleWidth, wallHeight, wallThickness)
                 ));
             }
 

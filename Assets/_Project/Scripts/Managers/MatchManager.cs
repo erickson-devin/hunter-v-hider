@@ -392,22 +392,14 @@ namespace HunterVsHider.Managers
             return MapGenerator.GetSafeAssassinSpawnPosition(mapSize);
         }
 
-        public Vector3 GetPoliceBreachSpawnPosition(ulong clientId, int fallbackIndex, int mapSize)
+        public Vector3 GetPoliceBreachSpawnPosition(ulong clientId, int fallbackSlotIndex, int mapSize)
         {
-            var breachPositions = GridManager.GetBreachSpawnPositions(mapSize);
-            if (breachPositions == null || breachPositions.Count == 0)
+            int roomIndex = 0;
+            if (policeSelectedBreachRooms.TryGetValue(clientId, out int rIdx))
             {
-                return MapGenerator.GetSafePoliceSpawnPosition(fallbackIndex, mapSize);
+                roomIndex = rIdx;
             }
-
-            if (policeSelectedBreachRooms.TryGetValue(clientId, out int roomIndex))
-            {
-                int clamped = Mathf.Clamp(roomIndex, 0, breachPositions.Count - 1);
-                return breachPositions[clamped];
-            }
-
-            int defaultIndex = Mathf.Abs(fallbackIndex) % breachPositions.Count;
-            return breachPositions[defaultIndex];
+            return GridManager.GetBreachSpawnPosition(roomIndex, fallbackSlotIndex, mapSize);
         }
 
         /// <summary>
@@ -558,7 +550,7 @@ namespace HunterVsHider.Managers
         }
 
         /// <summary>
-        /// Teleports Police players from Zone_PolicePrep into the generated combat arena corridors (South spawn),
+        /// Teleports Police players from Zone_PolicePrep into their selected Breach Room 3x3 spawn grid nodes,
         /// and ensures the Assassin avatar is positioned in the arena (North spawn).
         /// </summary>
         private void ExecuteCombatPhaseTeleportation()
@@ -569,7 +561,7 @@ namespace HunterVsHider.Managers
             FindZoneReferencesIfNull();
 
             int mapSize = selectedMapSize.Value > 0 ? selectedMapSize.Value : 50;
-            int policeCount = 0;
+            Dictionary<int, int> roomOccupancyCounter = new Dictionary<int, int>();
 
             if (NetworkManager.Singleton != null)
             {
@@ -583,10 +575,25 @@ namespace HunterVsHider.Managers
 
                     if (playerState.Role == PlayerRole.Police)
                     {
-                        Vector3 targetSpawn = GetPoliceBreachSpawnPosition(playerState.OwnerClientId, policeCount, mapSize);
+                        int chosenRoom = 0;
+                        if (policeSelectedBreachRooms.TryGetValue(playerState.OwnerClientId, out int rIdx))
+                        {
+                            chosenRoom = rIdx;
+                        }
+
+                        int slotIndex = 0;
+                        if (roomOccupancyCounter.ContainsKey(chosenRoom))
+                        {
+                            slotIndex = roomOccupancyCounter[chosenRoom]++;
+                        }
+                        else
+                        {
+                            roomOccupancyCounter[chosenRoom] = 1;
+                        }
+
+                        Vector3 targetSpawn = GridManager.GetBreachSpawnPosition(chosenRoom, slotIndex, mapSize);
                         playerState.ServerTeleport(targetSpawn, Quaternion.identity);
-                        Debug.Log($"[MatchManager] Teleported Police ClientId {playerState.OwnerClientId} to Breach Room ({targetSpawn})");
-                        policeCount++;
+                        Debug.Log($"[MatchManager] Teleported Police ClientId {playerState.OwnerClientId} to Breach Room {chosenRoom} (Slot: {slotIndex}, Pos: {targetSpawn})");
                     }
                     else if (playerState.Role == PlayerRole.Assassin)
                     {
@@ -722,16 +729,7 @@ namespace HunterVsHider.Managers
             if (playerState.Role == PlayerRole.Police)
             {
                 int localBreachIndex = (PoliceBreachUI.Instance != null) ? PoliceBreachUI.Instance.SelectedRoomIndex : 0;
-                var breachPositions = GridManager.GetBreachSpawnPositions(mapSize);
-                if (breachPositions != null && breachPositions.Count > 0)
-                {
-                    int clamped = Mathf.Clamp(localBreachIndex, 0, breachPositions.Count - 1);
-                    targetSpawn = breachPositions[clamped];
-                }
-                else
-                {
-                    targetSpawn = MapGenerator.GetSafePoliceSpawnPosition(0, mapSize);
-                }
+                targetSpawn = GridManager.GetBreachSpawnPosition(localBreachIndex, 0, mapSize);
                 targetRot = Quaternion.identity;
             }
             else if (playerState.Role == PlayerRole.Assassin)

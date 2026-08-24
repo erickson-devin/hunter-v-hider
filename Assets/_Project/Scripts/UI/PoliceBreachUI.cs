@@ -162,7 +162,7 @@ namespace HunterVsHider.UI
             var roomNames = GridManager.GetBreachRoomNames(mapSize);
             var roomPositions = GridManager.GetBreachSpawnPositions(mapSize);
 
-            int panelW = 420;
+            int panelW = Mathf.Max(420, roomNames.Count * 135 + 20);
             int panelH = 150;
             int x = 20;
             int y = Screen.height - panelH - 30;
