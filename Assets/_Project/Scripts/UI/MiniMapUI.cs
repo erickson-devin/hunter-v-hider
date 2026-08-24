@@ -10,13 +10,14 @@ using HunterVsHider.Map;
 namespace HunterVsHider.UI
 {
     /// <summary>
-    /// [HOTFIX] Dual-Role Tactical Mini-Map UI component.
+    /// Dual-Role Tactical Mini-Map UI component.
     /// Anchored to top-right screen-space (200px x 200px).
     /// Features:
     /// - Match State Gating: 100% hidden during Lobby & PrepPhase; reveals when CombatPhase starts.
     /// - Fog of War Masking (MiniMap_FoWOverlay.shader):
-    ///     * Police: Multiplies map layout geometry by live fovMaskRT alpha channel. Unexplored rooms start pitch black and unveil as explored memories.
+    ///     * Police: Multiplies map layout geometry by live fovMaskRT red channel. Unexplored rooms start pitch black and unveil as explored memories.
     ///     * Assassin: Full-visibility blueprint overlay rendered from round start.
+    /// - Local Material Isolation: Unique runtime Material instance instantiated per client to prevent memory overwrites across joining ParrelSync clients.
     /// - Local Player Tracking: Crisp white directional arrow tracking character heading.
     /// - Strict Teammate Isolation: Does NOT render remote Police teammates on mini-map.
     /// - Enemy Line-of-Sight Visibility Filtering: Red enemy blips only render if TargetVisibility.IsVisible == true.
@@ -43,7 +44,7 @@ namespace HunterVsHider.UI
         public Transform enemyIconsContainer;
 
         [Header("Material & Overlay Settings")]
-        [Tooltip("Material running HunterVsHider/UI/MiniMap_FoWOverlay shader.")]
+        [Tooltip("Optional template material running UI/MiniMap_FoWOverlay shader.")]
         public Material miniMapMaskMaterial;
 
         [Header("Tactical Marker Prefabs / Templates")]
@@ -68,7 +69,7 @@ namespace HunterVsHider.UI
         private PlayerNetworkState cachedLocalPlayer;
         private PlayerRole currentRole = PlayerRole.Unassigned;
         private Texture2D bakedMapLayoutTexture;
-        private Material runtimeMaskMaterial;
+        private Material uniqueMiniMapMaterial;
         private bool isMiniMapInitialized = false;
 
         // Enemy Marker Tracking
@@ -127,11 +128,13 @@ namespace HunterVsHider.UI
             if (bakedMapLayoutTexture != null)
             {
                 Destroy(bakedMapLayoutTexture);
+                bakedMapLayoutTexture = null;
             }
 
-            if (runtimeMaskMaterial != null)
+            if (uniqueMiniMapMaterial != null)
             {
-                Destroy(runtimeMaskMaterial);
+                Destroy(uniqueMiniMapMaterial);
+                uniqueMiniMapMaterial = null;
             }
         }
 
@@ -168,7 +171,7 @@ namespace HunterVsHider.UI
             BakeMapLayoutTextureIfAvailable();
         }
 
-        private FogMemoryManager subscribedFoWManager;
+        private FogOfWarManager subscribedFoWManager;
 
         public void HandleFoWTextureReady(RenderTexture readyTexture)
         {
@@ -179,30 +182,30 @@ namespace HunterVsHider.UI
 
             if (currentRole == PlayerRole.Police && mapTextureDisplay != null)
             {
-                if (runtimeMaskMaterial == null)
+                if (uniqueMiniMapMaterial == null)
                 {
                     Shader shader = Shader.Find("UI/MiniMap_FoWOverlay") ?? Shader.Find("HunterVsHider/UI/MiniMap_FoWOverlay");
                     if (shader != null)
                     {
-                        runtimeMaskMaterial = new Material(shader);
+                        uniqueMiniMapMaterial = new Material(shader);
                     }
                     else if (miniMapMaskMaterial != null)
                     {
-                        runtimeMaskMaterial = new Material(miniMapMaskMaterial);
+                        uniqueMiniMapMaterial = new Material(miniMapMaskMaterial);
                     }
                 }
 
-                if (runtimeMaskMaterial != null)
+                if (uniqueMiniMapMaterial != null)
                 {
                     if (bakedMapLayoutTexture != null)
                     {
-                        runtimeMaskMaterial.SetTexture("_MainTex", bakedMapLayoutTexture);
+                        uniqueMiniMapMaterial.SetTexture("_MainTex", bakedMapLayoutTexture);
                     }
-                    runtimeMaskMaterial.SetTexture("_FoWMaskTex", readyTexture);
-                    runtimeMaskMaterial.SetVector("_FoVUVRect", fovSubRect);
-                    runtimeMaskMaterial.SetFloat("_IsAssassin", 0.0f);
+                    uniqueMiniMapMaterial.SetTexture("_FoWMaskTex", readyTexture);
+                    uniqueMiniMapMaterial.SetVector("_FoVUVRect", fovSubRect);
+                    uniqueMiniMapMaterial.SetFloat("_IsAssassin", 0.0f);
 
-                    mapTextureDisplay.material = runtimeMaskMaterial;
+                    mapTextureDisplay.material = uniqueMiniMapMaterial;
                     mapTextureDisplay.texture = bakedMapLayoutTexture != null ? (Texture)bakedMapLayoutTexture : readyTexture;
                     mapTextureDisplay.uvRect = new Rect(0, 0, 1, 1);
                     mapTextureDisplay.color = Color.white;
@@ -228,11 +231,22 @@ namespace HunterVsHider.UI
             if (NetworkManager.Singleton != null && NetworkManager.Singleton.LocalClient != null && NetworkManager.Singleton.LocalClient.PlayerObject != null)
             {
                 var localObj = NetworkManager.Singleton.LocalClient.PlayerObject;
-                var fow = localObj.GetComponentInChildren<FogMemoryManager>(true);
+                var fow = localObj.GetComponentInChildren<FogOfWarManager>(true);
                 if (fow != null && fow.fovMaskRT != null)
                 {
                     return fow.fovMaskRT;
                 }
+
+                var memFow = localObj.GetComponentInChildren<FogMemoryManager>(true);
+                if (memFow != null && memFow.fovMaskRT != null)
+                {
+                    return memFow.fovMaskRT;
+                }
+            }
+
+            if (FogOfWarManager.Instance != null && FogOfWarManager.Instance.fovMaskRT != null)
+            {
+                return FogOfWarManager.Instance.fovMaskRT;
             }
 
             if (FogMemoryManager.Instance != null && FogMemoryManager.Instance.fovMaskRT != null)
@@ -240,26 +254,32 @@ namespace HunterVsHider.UI
                 return FogMemoryManager.Instance.fovMaskRT;
             }
 
-            var sceneFow = Object.FindAnyObjectByType<FogMemoryManager>();
+            var sceneFow = Object.FindAnyObjectByType<FogOfWarManager>();
             if (sceneFow != null && sceneFow.fovMaskRT != null)
             {
                 return sceneFow.fovMaskRT;
             }
 
+            var sceneMem = Object.FindAnyObjectByType<FogMemoryManager>();
+            if (sceneMem != null && sceneMem.fovMaskRT != null)
+            {
+                return sceneMem.fovMaskRT;
+            }
+
             return null;
         }
 
-        public FogMemoryManager GetLocalFoWManager()
+        public FogOfWarManager GetLocalFoWManager()
         {
             if (NetworkManager.Singleton != null && NetworkManager.Singleton.LocalClient != null && NetworkManager.Singleton.LocalClient.PlayerObject != null)
             {
                 var localObj = NetworkManager.Singleton.LocalClient.PlayerObject;
-                var fow = localObj.GetComponentInChildren<FogMemoryManager>(true);
+                var fow = localObj.GetComponentInChildren<FogOfWarManager>(true);
                 if (fow != null) return fow;
             }
 
-            if (FogMemoryManager.Instance != null) return FogMemoryManager.Instance;
-            return Object.FindAnyObjectByType<FogMemoryManager>();
+            if (FogOfWarManager.Instance != null) return FogOfWarManager.Instance;
+            return Object.FindAnyObjectByType<FogOfWarManager>();
         }
 
         /// <summary>
@@ -292,7 +312,7 @@ namespace HunterVsHider.UI
 
         /// <summary>
         /// Asymmetric Texture Setup (InitializeMiniMap(PlayerRole role)):
-        /// - Police Role: Uses MiniMap_FoWOverlay.shader material multiplying map layout geometry by live fovMaskRT alpha channel.
+        /// - Police Role: Uses MiniMap_FoWOverlay.shader material multiplying map layout geometry by live fovMaskRT red channel.
         ///   Starts pitch black and permanently unveils visited hallways/rooms as dark gray memories.
         /// - Assassin Role: Displays the Map Blueprint directly without fog masking.
         /// </summary>
@@ -305,8 +325,24 @@ namespace HunterVsHider.UI
             float activeMapSize = GetActiveArenaDimension();
             Vector4 fovSubRect = CalculateFoVTextureSubRect(activeMapSize);
 
-            // Subscribe to local client's FoW texture ready event
-            FogMemoryManager localFoW = GetLocalFoWManager();
+            // 1. Resolve local player entity strictly via local client ownership
+            PlayerController localPlayer = null;
+            if (NetworkManager.Singleton != null && NetworkManager.Singleton.LocalClient != null && NetworkManager.Singleton.LocalClient.PlayerObject != null)
+            {
+                localPlayer = NetworkManager.Singleton.LocalClient.PlayerObject.GetComponent<PlayerController>();
+            }
+
+            // 2. Bind to local client owner's FogOfWarManager instance
+            FogOfWarManager localFoW = null;
+            if (localPlayer != null)
+            {
+                localFoW = localPlayer.GetComponent<FogOfWarManager>();
+            }
+            if (localFoW == null)
+            {
+                localFoW = GetLocalFoWManager();
+            }
+
             if (localFoW != null)
             {
                 if (subscribedFoWManager != localFoW)
@@ -325,42 +361,54 @@ namespace HunterVsHider.UI
                 }
             }
 
-            RenderTexture fowRT = GetLocalFoWMaskRT();
-
-            if (runtimeMaskMaterial == null)
+            RenderTexture fowRT = null;
+            if (localFoW != null && localFoW.fovMaskRT != null)
             {
-                if (miniMapMaskMaterial != null)
-                {
-                    runtimeMaskMaterial = new Material(miniMapMaskMaterial);
-                }
-                else
-                {
-                    Shader shader = Shader.Find("HunterVsHider/UI/MiniMap_FoWOverlay") ?? Shader.Find("UI/MiniMap_FoWOverlay");
-                    if (shader != null)
-                    {
-                        runtimeMaskMaterial = new Material(shader);
-                    }
-                }
+                fowRT = localFoW.fovMaskRT;
+            }
+            if (fowRT == null)
+            {
+                fowRT = GetLocalFoWMaskRT();
             }
 
-            if (mapTextureDisplay != null)
+            if (role == PlayerRole.Police)
             {
-                if (role == PlayerRole.Police)
+                if (localFoW != null)
                 {
-                    if (runtimeMaskMaterial != null)
+                    localFoW.ResetFog();
+                    localFoW.ClearExploredMemoryGrid();
+                }
+
+                // 3. Enforce local runtime material instantiation per client (never assign shared project materials directly)
+                if (uniqueMiniMapMaterial == null)
+                {
+                    Shader shader = Shader.Find("UI/MiniMap_FoWOverlay") ?? Shader.Find("HunterVsHider/UI/MiniMap_FoWOverlay");
+                    if (shader != null)
+                    {
+                        uniqueMiniMapMaterial = new Material(shader);
+                    }
+                    else if (miniMapMaskMaterial != null)
+                    {
+                        uniqueMiniMapMaterial = new Material(miniMapMaskMaterial);
+                    }
+                }
+
+                if (mapTextureDisplay != null)
+                {
+                    if (uniqueMiniMapMaterial != null)
                     {
                         if (bakedMapLayoutTexture != null)
                         {
-                            runtimeMaskMaterial.SetTexture("_MainTex", bakedMapLayoutTexture);
+                            uniqueMiniMapMaterial.SetTexture("_MainTex", bakedMapLayoutTexture);
                         }
                         if (fowRT != null)
                         {
-                            runtimeMaskMaterial.SetTexture("_FoWMaskTex", fowRT);
+                            uniqueMiniMapMaterial.SetTexture("_FoWMaskTex", fowRT);
                         }
-                        runtimeMaskMaterial.SetVector("_FoVUVRect", fovSubRect);
-                        runtimeMaskMaterial.SetFloat("_IsAssassin", 0.0f);
+                        uniqueMiniMapMaterial.SetVector("_FoVUVRect", fovSubRect);
+                        uniqueMiniMapMaterial.SetFloat("_IsAssassin", 0.0f);
 
-                        mapTextureDisplay.material = runtimeMaskMaterial;
+                        mapTextureDisplay.material = uniqueMiniMapMaterial;
                         mapTextureDisplay.texture = bakedMapLayoutTexture != null ? (Texture)bakedMapLayoutTexture : fowRT;
                         mapTextureDisplay.uvRect = new Rect(0, 0, 1, 1);
                         mapTextureDisplay.color = Color.white;
@@ -373,9 +421,12 @@ namespace HunterVsHider.UI
                         mapTextureDisplay.color = Color.white;
                     }
                 }
-                else
+            }
+            else
+            {
+                // Assassin: Direct Map Blueprint overlay without fog suppression (strictly isolated from uniqueMiniMapMaterial)
+                if (mapTextureDisplay != null)
                 {
-                    // Assassin: Direct Map Blueprint overlay without fog suppression
                     mapTextureDisplay.material = null;
                     mapTextureDisplay.texture = bakedMapLayoutTexture;
                     mapTextureDisplay.uvRect = new Rect(0, 0, 1, 1);
@@ -415,19 +466,32 @@ namespace HunterVsHider.UI
             // Refresh Police FoW live texture and UV bounds dynamically
             if (currentRole == PlayerRole.Police && mapTextureDisplay != null)
             {
-                RenderTexture fowRT = GetLocalFoWMaskRT();
+                PlayerController localPC = null;
+                if (NetworkManager.Singleton != null && NetworkManager.Singleton.LocalClient != null && NetworkManager.Singleton.LocalClient.PlayerObject != null)
+                {
+                    localPC = NetworkManager.Singleton.LocalClient.PlayerObject.GetComponent<PlayerController>();
+                }
+
+                FogOfWarManager localFoW = localPC != null ? localPC.GetComponent<FogOfWarManager>() : null;
+                RenderTexture fowRT = (localFoW != null && localFoW.fovMaskRT != null) ? localFoW.fovMaskRT : GetLocalFoWMaskRT();
+
                 if (fowRT != null)
                 {
                     Vector4 fovSubRect = CalculateFoVTextureSubRect(activeMapSize);
-                    if (runtimeMaskMaterial != null)
+                    if (uniqueMiniMapMaterial != null)
                     {
-                        runtimeMaskMaterial.SetTexture("_FoWMaskTex", fowRT);
-                        if (bakedMapLayoutTexture != null && runtimeMaskMaterial.GetTexture("_MainTex") != bakedMapLayoutTexture)
+                        uniqueMiniMapMaterial.SetTexture("_FoWMaskTex", fowRT);
+                        if (bakedMapLayoutTexture != null && uniqueMiniMapMaterial.GetTexture("_MainTex") != bakedMapLayoutTexture)
                         {
-                            runtimeMaskMaterial.SetTexture("_MainTex", bakedMapLayoutTexture);
+                            uniqueMiniMapMaterial.SetTexture("_MainTex", bakedMapLayoutTexture);
                         }
-                        runtimeMaskMaterial.SetVector("_FoVUVRect", fovSubRect);
-                        runtimeMaskMaterial.SetFloat("_IsAssassin", 0.0f);
+                        uniqueMiniMapMaterial.SetVector("_FoVUVRect", fovSubRect);
+                        uniqueMiniMapMaterial.SetFloat("_IsAssassin", 0.0f);
+
+                        if (mapTextureDisplay.material != uniqueMiniMapMaterial)
+                        {
+                            mapTextureDisplay.material = uniqueMiniMapMaterial;
+                        }
                     }
                     else
                     {
@@ -691,7 +755,7 @@ namespace HunterVsHider.UI
 
             if (miniMapMaskMaterial == null)
             {
-                Shader shader = Shader.Find("HunterVsHider/UI/MiniMap_FoWOverlay");
+                Shader shader = Shader.Find("HunterVsHider/UI/MiniMap_FoWOverlay") ?? Shader.Find("UI/MiniMap_FoWOverlay");
                 if (shader != null)
                 {
                     miniMapMaskMaterial = new Material(shader);
@@ -779,9 +843,9 @@ namespace HunterVsHider.UI
             bakedMapLayoutTexture.SetPixels(pixels);
             bakedMapLayoutTexture.Apply();
 
-            if (runtimeMaskMaterial != null)
+            if (uniqueMiniMapMaterial != null)
             {
-                runtimeMaskMaterial.SetTexture("_MainTex", bakedMapLayoutTexture);
+                uniqueMiniMapMaterial.SetTexture("_MainTex", bakedMapLayoutTexture);
             }
             else if (currentRole == PlayerRole.Assassin && mapTextureDisplay != null)
             {
@@ -830,6 +894,16 @@ namespace HunterVsHider.UI
 
         private PlayerNetworkState GetLocalPlayer()
         {
+            if (NetworkManager.Singleton != null && NetworkManager.Singleton.LocalClient != null && NetworkManager.Singleton.LocalClient.PlayerObject != null)
+            {
+                var localNetState = NetworkManager.Singleton.LocalClient.PlayerObject.GetComponent<PlayerNetworkState>();
+                if (localNetState != null)
+                {
+                    cachedLocalPlayer = localNetState;
+                    return cachedLocalPlayer;
+                }
+            }
+
             if (cachedLocalPlayer != null && cachedLocalPlayer.IsSpawned && cachedLocalPlayer.IsLocalPlayer)
             {
                 return cachedLocalPlayer;

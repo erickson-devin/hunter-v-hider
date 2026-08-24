@@ -112,9 +112,8 @@ Shader "UI/MiniMap_FoWOverlay"
                 // Map UV from arena [0, 1] space to FoW 300m texture sub-region
                 float2 fowUV = _FoVUVRect.xy + i.uv * _FoVUVRect.zw;
 
-                // Sample RED channel where FogOfWarManager stores vision memory (support max across channels)
-                fixed4 fowSample = tex2D(_FoWMaskTex, fowUV);
-                fixed fogVisibility = max(fowSample.r, max(fowSample.g, fowSample.a));
+                // Sample RED channel of _FoWMaskTex to drive visibility and pitch-black culling
+                fixed fogVisibility = tex2D(_FoWMaskTex, fowUV).r;
 
                 // Hard-cull unexplored space to solid pitch black
                 if (fogVisibility < 0.05f)

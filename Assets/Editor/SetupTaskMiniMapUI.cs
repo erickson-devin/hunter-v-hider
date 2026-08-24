@@ -38,17 +38,28 @@ namespace HunterVsHider.Editor
 
             bool anyModified = false;
 
-            // 1. Ensure TargetVisibility on Player.prefab
+            // 1. Ensure TargetVisibility and FogOfWarManager on Player.prefab
             string playerPrefabPath = "Assets/_Project/Prefabs/Player.prefab";
             GameObject playerPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(playerPrefabPath);
             if (playerPrefab != null)
             {
+                bool prefabChanged = false;
                 if (playerPrefab.GetComponent<TargetVisibility>() == null)
                 {
                     playerPrefab.AddComponent<TargetVisibility>();
+                    prefabChanged = true;
+                    Debug.Log("[SetupTaskMiniMapUI] Added TargetVisibility component to Player.prefab.");
+                }
+                if (playerPrefab.GetComponent<FogOfWarManager>() == null)
+                {
+                    playerPrefab.AddComponent<FogOfWarManager>();
+                    prefabChanged = true;
+                    Debug.Log("[SetupTaskMiniMapUI] Added FogOfWarManager component to Player.prefab.");
+                }
+                if (prefabChanged)
+                {
                     EditorUtility.SetDirty(playerPrefab);
                     AssetDatabase.SaveAssets();
-                    Debug.Log("[SetupTaskMiniMapUI] Added TargetVisibility component to Player.prefab.");
                 }
             }
 
@@ -258,10 +269,8 @@ namespace HunterVsHider.Editor
             miniMapUI.fowWorldDimensions = new Vector2(300f, 300f);
             miniMapUI.fowWorldCenter = Vector3.zero;
 
-            if (miniMapMat != null)
-            {
-                mapRawImage.material = miniMapMat;
-            }
+            // Local Material Isolation: Enforce null material in scene to prevent shared asset mutation
+            mapRawImage.material = null;
 
             // 11. Mark scene dirty and save
             EditorUtility.SetDirty(canvasObj);
