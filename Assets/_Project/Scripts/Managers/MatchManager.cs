@@ -337,11 +337,13 @@ namespace HunterVsHider.Managers
 
         [Header("Asymmetric Spawning State")]
         private readonly Dictionary<ulong, int> policeSelectedBreachRooms = new Dictionary<ulong, int>();
+        private readonly Dictionary<ulong, int> policeSelectedBreachSlots = new Dictionary<ulong, int>();
+        private readonly Dictionary<int, int> roomOccupancyCounter = new Dictionary<int, int>();
         private Vector3 assassinCustomSpawnPosition = Vector3.zero;
 
         /// <summary>
         /// Server RPC allowing a Police player to select a tactical South Breach Room during PrepPhase.
-        /// Records the chosen breach room index without teleporting immediately so the officer stays in Zone_PolicePrep.
+        /// Records the chosen breach room index and assigns the next available 3x3 squad slot (0..8).
         /// </summary>
         [Rpc(SendTo.Server)]
         public void SelectBreachRoomServerRpc(int roomIndex, RpcParams rpcParams = default)
@@ -356,8 +358,15 @@ namespace HunterVsHider.Managers
             int clampedIndex = Mathf.Clamp(roomIndex, 0, breachPositions.Count - 1);
             policeSelectedBreachRooms[senderClientId] = clampedIndex;
 
+            if (!roomOccupancyCounter.ContainsKey(clampedIndex))
+            {
+                roomOccupancyCounter[clampedIndex] = 0;
+            }
+            int assignedSlot = roomOccupancyCounter[clampedIndex]++;
+            policeSelectedBreachSlots[senderClientId] = assignedSlot;
+
             string roomName = (clampedIndex < breachNames.Count) ? breachNames[clampedIndex] : $"Room {clampedIndex}";
-            Debug.Log($"[MatchManager] Server registered Police ClientId {senderClientId} breach selection: {roomName} (Physical teleportation deferred to CombatPhase start)");
+            Debug.Log($"[MatchManager] Server registered Police ClientId {senderClientId} breach selection: {roomName} (Assigned Slot: {assignedSlot})");
         }
 
         /// <summary>
@@ -399,7 +408,14 @@ namespace HunterVsHider.Managers
             {
                 roomIndex = rIdx;
             }
-            return GridManager.GetBreachSpawnPosition(roomIndex, fallbackSlotIndex, mapSize);
+
+            int slotIndex = fallbackSlotIndex;
+            if (policeSelectedBreachSlots.TryGetValue(clientId, out int sIdx))
+            {
+                slotIndex = sIdx;
+            }
+
+            return GridManager.GetBreachRoomSlotPositionStatic(roomIndex, slotIndex, mapSize);
         }
 
         /// <summary>
@@ -497,6 +513,7 @@ namespace HunterVsHider.Managers
 
         /// <summary>
         /// Teleports Police players to Zone_PolicePrep and Assassin player to Zone_CombatArena.
+        /// Resets breach room occupancy tracking.
         /// </summary>
         private void ExecutePrepPhaseTeleportation()
         {
@@ -504,6 +521,11 @@ namespace HunterVsHider.Managers
 
             PurgeLegacyPrototypeDummies();
             FindZoneReferencesIfNull();
+
+            // Reset breach room occupancy tracking for the new round
+            roomOccupancyCounter.Clear();
+            policeSelectedBreachRooms.Clear();
+            policeSelectedBreachSlots.Clear();
 
             Vector3 lobbyPos = zoneLobby != null ? zoneLobby.position : new Vector3(1000f, 0f, 0f);
             Vector3 policePrepPos = zonePolicePrep != null ? zonePolicePrep.position : new Vector3(2000f, 0f, 0f);
@@ -561,7 +583,7 @@ namespace HunterVsHider.Managers
             FindZoneReferencesIfNull();
 
             int mapSize = selectedMapSize.Value > 0 ? selectedMapSize.Value : 50;
-            Dictionary<int, int> roomOccupancyCounter = new Dictionary<int, int>();
+            Dictionary<int, int> combatSlotCounter = new Dictionary<int, int>();
 
             if (NetworkManager.Singleton != null)
             {
@@ -582,16 +604,20 @@ namespace HunterVsHider.Managers
                         }
 
                         int slotIndex = 0;
-                        if (roomOccupancyCounter.ContainsKey(chosenRoom))
+                        if (policeSelectedBreachSlots.TryGetValue(playerState.OwnerClientId, out int sIdx))
                         {
-                            slotIndex = roomOccupancyCounter[chosenRoom]++;
+                            slotIndex = sIdx;
                         }
                         else
                         {
-                            roomOccupancyCounter[chosenRoom] = 1;
+                            if (!combatSlotCounter.ContainsKey(chosenRoom))
+                            {
+                                combatSlotCounter[chosenRoom] = 0;
+                            }
+                            slotIndex = combatSlotCounter[chosenRoom]++;
                         }
 
-                        Vector3 targetSpawn = GridManager.GetBreachSpawnPosition(chosenRoom, slotIndex, mapSize);
+                        Vector3 targetSpawn = GridManager.GetBreachRoomSlotPositionStatic(chosenRoom, slotIndex, mapSize);
                         playerState.ServerTeleport(targetSpawn, Quaternion.identity);
                         Debug.Log($"[MatchManager] Teleported Police ClientId {playerState.OwnerClientId} to Breach Room {chosenRoom} (Slot: {slotIndex}, Pos: {targetSpawn})");
                     }

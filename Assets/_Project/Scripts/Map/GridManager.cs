@@ -165,11 +165,11 @@ namespace HunterVsHider.Map
         }
 
         /// <summary>
-        /// Generates a 3x3 multi-player spawn grid (9 distinct node positions) spaced 2.5m apart
+        /// Generates a 3x3 multi-player spawn grid (9 distinct node positions) spaced 1.5m apart
         /// in the spacious back pocket behind the oriented privacy baffle:
-        /// - South Rooms: SpawnPos(r, c) = RoomCenter + Vector3((c - 1) * 2.5m, 0, (r - 1) * 2.5m - 2.0m)
-        /// - West Room: SpawnPos(r, c) = RoomCenter + Vector3((c - 1) * 2.5m - 2.0m, 0, (r - 1) * 2.5m)
-        /// - East Room: SpawnPos(r, c) = RoomCenter + Vector3((c - 1) * 2.5m + 2.0m, 0, (r - 1) * 2.5m)
+        /// - South Rooms: SpawnPos(r, c) = RoomCenter + Vector3((c - 1) * 1.5m, 0, (row - 1) * 1.5m - 2.0m)
+        /// - West Room: SpawnPos(r, c) = RoomCenter + Vector3((col - 1) * 1.5m - 2.0m, 0, (row - 1) * 1.5m)
+        /// - East Room: SpawnPos(r, c) = RoomCenter + Vector3((col - 1) * 1.5m + 2.0m, 0, (row - 1) * 1.5m)
         /// </summary>
         public static List<Vector3> GetBreachRoomSpawnArray(int roomIndex, int mapSize = 50)
         {
@@ -192,22 +192,22 @@ namespace HunterVsHider.Map
                     if (room.facing == BreachRoomFacing.WestPerimeter)
                     {
                         // Staged in western half of room behind vertical baffle
-                        float offsetX = (c - 1) * 2.5f - 2.0f;
-                        float offsetZ = (r - 1) * 2.5f;
+                        float offsetX = (c - 1) * 1.5f - 2.0f;
+                        float offsetZ = (r - 1) * 1.5f;
                         pos = new Vector3(center.x + offsetX, 1.0f, center.z + offsetZ);
                     }
                     else if (room.facing == BreachRoomFacing.EastPerimeter)
                     {
                         // Staged in eastern half of room behind vertical baffle
-                        float offsetX = (c - 1) * 2.5f + 2.0f;
-                        float offsetZ = (r - 1) * 2.5f;
+                        float offsetX = (c - 1) * 1.5f + 2.0f;
+                        float offsetZ = (r - 1) * 1.5f;
                         pos = new Vector3(center.x + offsetX, 1.0f, center.z + offsetZ);
                     }
                     else // SouthPerimeter
                     {
                         // Staged in southern half of room behind horizontal baffle
-                        float offsetX = (c - 1) * 2.5f;
-                        float offsetZ = (r - 1) * 2.5f - 2.0f;
+                        float offsetX = (c - 1) * 1.5f;
+                        float offsetZ = (r - 1) * 1.5f - 2.0f;
                         pos = new Vector3(center.x + offsetX, 1.0f, center.z + offsetZ);
                     }
 
@@ -219,14 +219,55 @@ namespace HunterVsHider.Map
         }
 
         /// <summary>
+        /// Calculates the exact world position for a specific 3x3 slot index (0..8) in the breach room.
+        /// </summary>
+        public static Vector3 GetBreachRoomSlotPositionStatic(int roomIndex, int slotIndex, int mapSize = 50)
+        {
+            var roomsData = GetBreachRoomsData(mapSize);
+            if (roomsData == null || roomsData.Count == 0)
+            {
+                return new Vector3(0f, 1f, -(mapSize * 0.5f) - 6.0f);
+            }
+
+            int clampedIndex = Mathf.Clamp(roomIndex, 0, roomsData.Count - 1);
+            BreachRoomData room = roomsData[clampedIndex];
+            Vector3 center = room.center;
+
+            int clampedSlot = Mathf.Abs(slotIndex) % 9;
+            int row = clampedSlot / 3; // 0, 1, 2
+            int col = clampedSlot % 3; // 0, 1, 2
+
+            Vector3 offset;
+            if (room.facing == BreachRoomFacing.WestPerimeter)
+            {
+                offset = new Vector3((col - 1) * 1.5f - 2.0f, 0f, (row - 1) * 1.5f);
+            }
+            else if (room.facing == BreachRoomFacing.EastPerimeter)
+            {
+                offset = new Vector3((col - 1) * 1.5f + 2.0f, 0f, (row - 1) * 1.5f);
+            }
+            else // SouthPerimeter
+            {
+                offset = new Vector3((col - 1) * 1.5f, 0f, (row - 1) * 1.5f - 2.0f);
+            }
+
+            return new Vector3(center.x + offset.x, 1.0f, center.z + offset.z);
+        }
+
+        /// <summary>
+        /// Instance method to get breach room slot position.
+        /// </summary>
+        public Vector3 GetBreachRoomSlotPosition(int roomIndex, int slotIndex, int mapSize = 50)
+        {
+            return GetBreachRoomSlotPositionStatic(roomIndex, slotIndex, mapSize);
+        }
+
+        /// <summary>
         /// Returns a specific spawn coordinate from the room's 3x3 node array based on the squad slot index.
         /// </summary>
         public static Vector3 GetBreachSpawnPosition(int roomIndex, int slotIndex, int mapSize = 50)
         {
-            var spawns = GetBreachRoomSpawnArray(roomIndex, mapSize);
-            if (spawns == null || spawns.Count == 0) return new Vector3(0f, 1f, -(mapSize * 0.5f) - 6.0f);
-            int clampedSlot = Mathf.Abs(slotIndex) % spawns.Count;
-            return spawns[clampedSlot];
+            return GetBreachRoomSlotPositionStatic(roomIndex, slotIndex, mapSize);
         }
 
         /// <summary>
