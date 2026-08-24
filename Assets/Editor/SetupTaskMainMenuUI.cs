@@ -28,12 +28,16 @@ namespace HunterVsHider.Editor
             if (ParrelSync.ClonesManager.IsClone()) return;
             if (Application.isPlaying) return;
 
-            Debug.Log("[SetupTaskMainMenuUI] Starting Streamlined Main Menu UI Setup with Background Image...");
+            Debug.Log("[SetupTaskMainMenuUI] Starting Main Menu Background UI Canvas Scaling & Button Anchoring Setup...");
 
             // 1. Ensure Texture Import Settings for MainMenuBackground
-            string bgJpgPath = "Assets/_Project/Textures/UI/MainMenuBackground.jpg";
             string bgPngPath = "Assets/_Project/Textures/UI/MainMenuBackground.png";
-            string activeBgPath = System.IO.File.Exists(bgJpgPath) ? bgJpgPath : (System.IO.File.Exists(bgPngPath) ? bgPngPath : null);
+            string bgJpgPath = "Assets/_Project/Textures/UI/MainMenuBackground.jpg";
+            string bgJpegPath = "Assets/_Project/Textures/UI/MainMenuBackground.jpeg";
+
+            string activeBgPath = System.IO.File.Exists(bgPngPath) ? bgPngPath : 
+                                 (System.IO.File.Exists(bgJpgPath) ? bgJpgPath : 
+                                 (System.IO.File.Exists(bgJpegPath) ? bgJpegPath : null));
 
             if (activeBgPath != null)
             {
@@ -113,13 +117,16 @@ namespace HunterVsHider.Editor
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             canvas.sortingOrder = 200; // Above general in-game canvases
 
+            // Configure CanvasScaler: Scale With Screen Size (1920x1080, match 0.5)
             CanvasScaler scaler = canvasObj.GetComponent<CanvasScaler>();
             if (scaler == null)
             {
                 scaler = canvasObj.AddComponent<CanvasScaler>();
-                scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-                scaler.referenceResolution = new Vector2(1920, 1080);
             }
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1920, 1080);
+            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+            scaler.matchWidthOrHeight = 0.5f;
 
             GraphicRaycaster raycaster = canvasObj.GetComponent<GraphicRaycaster>();
             if (raycaster == null)
@@ -134,7 +141,7 @@ namespace HunterVsHider.Editor
             }
             mainMenuUI.canvasMainMenu = canvasObj;
 
-            // Background_Image (Full-screen stretch)
+            // Background_Image (Full-screen stretch with AspectRatioFitter EnvelopeParent)
             Transform bgTrans = canvasObj.transform.Find("Background_Image");
             GameObject bgObj = (bgTrans != null) ? bgTrans.gameObject : new GameObject("Background_Image");
             bgObj.transform.SetParent(canvasObj.transform, false);
@@ -150,6 +157,12 @@ namespace HunterVsHider.Editor
             Image bgImage = bgObj.GetComponent<Image>();
             if (bgImage == null) bgImage = bgObj.AddComponent<Image>();
             bgImage.color = Color.white;
+            bgImage.preserveAspect = true;
+
+            AspectRatioFitter arf = bgObj.GetComponent<AspectRatioFitter>();
+            if (arf == null) arf = bgObj.AddComponent<AspectRatioFitter>();
+            arf.aspectMode = AspectRatioFitter.AspectMode.EnvelopeParent;
+            arf.aspectRatio = 16f / 9f; // 1.777778 for 1920x1080 native background
 
             if (!string.IsNullOrEmpty(bgPath))
             {
@@ -161,7 +174,7 @@ namespace HunterVsHider.Editor
                 }
             }
 
-            // Construct MainPanel
+            // Construct Button Container (MainPanel) strictly anchored to Bottom-Right
             Transform mainPanelTrans = canvasObj.transform.Find("MainPanel");
             GameObject mainPanelObj;
             if (mainPanelTrans == null)
@@ -176,19 +189,19 @@ namespace HunterVsHider.Editor
 
             RectTransform mainPanelRT = mainPanelObj.GetComponent<RectTransform>();
             if (mainPanelRT == null) mainPanelRT = mainPanelObj.AddComponent<RectTransform>();
-            mainPanelRT.anchorMin = new Vector2(0.5f, 0.5f);
-            mainPanelRT.anchorMax = new Vector2(0.5f, 0.5f);
-            mainPanelRT.pivot = new Vector2(0.5f, 0.5f);
-            mainPanelRT.sizeDelta = new Vector2(500, 600);
-            mainPanelRT.anchoredPosition = Vector2.zero;
+            mainPanelRT.anchorMin = new Vector2(1f, 0f);
+            mainPanelRT.anchorMax = new Vector2(1f, 0f);
+            mainPanelRT.pivot = new Vector2(1f, 0f);
+            mainPanelRT.sizeDelta = new Vector2(420f, 500f);
+            mainPanelRT.anchoredPosition = new Vector2(-100f, 100f); // Pos X: -100, Pos Y: 100
 
             VerticalLayoutGroup vlg = mainPanelObj.GetComponent<VerticalLayoutGroup>();
             if (vlg == null) vlg = mainPanelObj.AddComponent<VerticalLayoutGroup>();
-            vlg.childAlignment = TextAnchor.MiddleCenter;
-            vlg.spacing = 20f;
-            vlg.childControlWidth = true;
+            vlg.childAlignment = TextAnchor.LowerRight;
+            vlg.spacing = 25f;
+            vlg.childControlWidth = false;
             vlg.childControlHeight = false;
-            vlg.childForceExpandWidth = true;
+            vlg.childForceExpandWidth = false;
             vlg.childForceExpandHeight = false;
 
             // Title Text
@@ -198,18 +211,19 @@ namespace HunterVsHider.Editor
             TextMeshProUGUI titleTMP = titleObj.GetComponent<TextMeshProUGUI>();
             if (titleTMP == null) titleTMP = titleObj.AddComponent<TextMeshProUGUI>();
             titleTMP.text = "HUNTER V HIDER";
-            titleTMP.fontSize = 48;
+            titleTMP.fontSize = 44;
             titleTMP.fontStyle = FontStyles.Bold;
-            titleTMP.alignment = TextAlignmentOptions.Center;
-            titleTMP.color = new Color(0.9f, 0.85f, 0.2f);
+            titleTMP.alignment = TextAlignmentOptions.Right;
+            titleTMP.color = new Color(0.95f, 0.85f, 0.2f);
             RectTransform titleRT = titleObj.GetComponent<RectTransform>();
-            titleRT.sizeDelta = new Vector2(450, 80);
+            if (titleRT == null) titleRT = titleObj.AddComponent<RectTransform>();
+            titleRT.sizeDelta = new Vector2(400, 70);
 
-            // 4 Main Buttons: HOST, JOIN, SETTINGS, QUIT
-            Button hostBtn = CreateOrGetButton(mainPanelObj.transform, "Button_HostMatch", "HOST MATCH", new Color(0.15f, 0.35f, 0.7f));
-            Button joinBtn = CreateOrGetButton(mainPanelObj.transform, "Button_JoinMatch", "JOIN MATCH", new Color(0.2f, 0.55f, 0.3f));
-            Button settingsBtn = CreateOrGetButton(mainPanelObj.transform, "Button_Settings", "SETTINGS", new Color(0.3f, 0.3f, 0.35f));
-            Button quitBtn = CreateOrGetButton(mainPanelObj.transform, "Button_Quit", "QUIT", new Color(0.6f, 0.2f, 0.2f));
+            // 4 Main Buttons: HOST MATCH, JOIN MATCH, SETTINGS, QUIT
+            Button hostBtn = CreateOrGetButton(mainPanelObj.transform, "Button_HostMatch", "HOST MATCH", new Color(0.12f, 0.28f, 0.55f, 0.9f));
+            Button joinBtn = CreateOrGetButton(mainPanelObj.transform, "Button_JoinMatch", "JOIN MATCH", new Color(0.15f, 0.45f, 0.25f, 0.9f));
+            Button settingsBtn = CreateOrGetButton(mainPanelObj.transform, "Button_Settings", "SETTINGS", new Color(0.22f, 0.24f, 0.28f, 0.9f));
+            Button quitBtn = CreateOrGetButton(mainPanelObj.transform, "Button_Quit", "QUIT", new Color(0.5f, 0.15f, 0.15f, 0.9f));
 
             mainMenuUI.mainPanel = mainPanelObj;
             mainMenuUI.hostButton = hostBtn;
@@ -280,6 +294,7 @@ namespace HunterVsHider.Editor
             headerTMP.alignment = TextAlignmentOptions.Center;
             headerTMP.color = Color.white;
             RectTransform headerRT = headerObj.GetComponent<RectTransform>();
+            if (headerRT == null) headerRT = headerObj.AddComponent<RectTransform>();
             headerRT.sizeDelta = new Vector2(380, 50);
 
             // Modal Buttons: LOCAL (LAN), PUBLIC (RELAY), CANCEL
@@ -300,7 +315,7 @@ namespace HunterVsHider.Editor
             EditorSceneManager.MarkSceneDirty(activeScene);
             EditorSceneManager.SaveScene(activeScene);
 
-            Debug.Log($"[SetupTaskMainMenuUI] Canvas_MainMenu hierarchy successfully saved in {scenePath}!");
+            Debug.Log($"[SetupTaskMainMenuUI] Canvas_MainMenu hierarchy successfully configured and saved in {scenePath}!");
         }
 
         private static Button CreateOrGetButton(Transform parent, string buttonName, string label, Color bgColor)
