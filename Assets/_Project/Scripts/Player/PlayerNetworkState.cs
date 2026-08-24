@@ -66,16 +66,17 @@ namespace HunterVsHider.Player
                 if (cam != null)
                 {
                     var follow = cam.GetComponent<HunterVsHider.Cameras.CameraFollow>();
+                    if (follow == null) follow = HunterVsHider.Cameras.CameraFollow.Instance;
                     if (follow != null)
                     {
                         var matchMgr = HunterVsHider.Managers.MatchManager.Instance ?? HunterVsHider.Managers.MatchManager.Singleton;
                         bool isPrep = matchMgr != null && matchMgr.CurrentState == HunterVsHider.Managers.MatchState.PrepPhase;
                         if (isPrep && Role == PlayerRole.Assassin)
                         {
-                            follow.SetTarget(null);
-                            follow.ActivateAssassinSkyView();
+                            int mapSize = matchMgr != null ? matchMgr.SelectedMapSize : 50;
+                            follow.SetGodView(true, mapSize);
                         }
-                        else
+                        else if (!isPrep || Role != PlayerRole.Assassin)
                         {
                             follow.SetTarget(transform);
                         }
@@ -178,15 +179,18 @@ namespace HunterVsHider.Player
                     int mapSize = HunterVsHider.Managers.MatchManager.Instance != null ? HunterVsHider.Managers.MatchManager.Instance.SelectedMapSize : 50;
                     if (camFollow != null)
                     {
-                        camFollow.SetTarget(null);
-                        camFollow.ActivateAssassinGodView(mapSize);
+                        camFollow.SetGodView(true, mapSize);
+                    }
+                    else if (HunterVsHider.Cameras.CameraFollow.Instance != null)
+                    {
+                        HunterVsHider.Cameras.CameraFollow.Instance.SetGodView(true, mapSize);
                     }
                     else
                     {
                         var mainCam = UnityEngine.Camera.main;
                         if (mainCam != null)
                         {
-                            mainCam.transform.position = new Vector3(0f, 35f, 0f);
+                            mainCam.transform.position = new Vector3(0f, mapSize * 0.9f, 0f);
                             mainCam.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
                         }
                     }
@@ -202,7 +206,7 @@ namespace HunterVsHider.Player
                     }
                     placementController.RefreshPlacementState();
 
-                    Debug.Log($"[PlayerNetworkState] Assassin entering PrepPhase -> Activated God-View Camera ({mapSize}x{mapSize}) at (0, 35, 0) with character tracking detached.");
+                    Debug.Log($"[PlayerNetworkState] Assassin entering PrepPhase -> Activated God-View Camera ({mapSize}x{mapSize}) with character tracking detached.");
                 }
                 else
                 {

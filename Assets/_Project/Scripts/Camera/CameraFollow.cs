@@ -1,10 +1,14 @@
 using UnityEngine;
+using Unity.Netcode;
+using HunterVsHider.Managers;
+using HunterVsHider.Map;
+using HunterVsHider.Player;
 
 namespace HunterVsHider.Cameras
 {
     /// <summary>
     /// Controls the local player's camera view.
-    /// Supports standard 60-degree tactical follow and full-map 90-degree Assassin God-View with WASD panning.
+    /// Supports standard 60-degree tactical follow and role-driven dynamic map-scaled 90-degree Assassin God-View with smooth scroll zoom.
     /// </summary>
     public class CameraFollow : MonoBehaviour
     {
@@ -30,6 +34,7 @@ namespace HunterVsHider.Cameras
         [SerializeField] private Vector3 targetSkyPosition;
         [SerializeField] private Quaternion targetSkyRotation;
         public float godViewPanSpeed = 30f;
+        [SerializeField] private float currentGodViewHeight = 45f;
 
         public bool IsSkyViewActive => isSkyViewActive;
         public bool isGodViewActive => isSkyViewActive;
@@ -40,7 +45,6 @@ namespace HunterVsHider.Cameras
         private UnityEngine.Camera cam;
         private Vector3 godViewPanOffset = Vector3.zero;
         private int currentMapSize = 50;
-        private float currentRequiredHeight = 35f;
 
         private void Awake()
         {
@@ -49,8 +53,32 @@ namespace HunterVsHider.Cameras
             if (cam == null) cam = UnityEngine.Camera.main;
         }
 
+        public bool LocalPlayerIsAssassin()
+        {
+            if (NetworkManager.Singleton != null && NetworkManager.Singleton.LocalClient != null)
+            {
+                var localObj = NetworkManager.Singleton.LocalClient.PlayerObject;
+                if (localObj != null)
+                {
+                    var playerState = localObj.GetComponent<PlayerNetworkState>();
+                    if (playerState != null)
+                    {
+                        return playerState.Role == PlayerRole.Assassin;
+                    }
+                }
+            }
+            return false;
+        }
+
         public void SetTarget(Transform newTarget)
         {
+            var matchMgr = MatchManager.Instance ?? MatchManager.Singleton;
+            bool isPrepPhase = matchMgr != null && matchMgr.CurrentState == MatchState.PrepPhase;
+            if ((isPrepPhase && LocalPlayerIsAssassin()) || isSkyViewActive)
+            {
+                target = null;
+                return; // HARD GUARD: Never allow SetTarget to attach while God-View is active!
+            }
             target = newTarget;
         }
 
@@ -58,40 +86,86 @@ namespace HunterVsHider.Cameras
         {
             if (active)
             {
-                SetTarget(null);
-                ActivateAssassinGodView(mapSize);
+                isSkyViewActive = true;
+                target = null; // Explicitly detach character tracking
+
+                int activeMapSize = (MatchManager.Singleton != null && MatchManager.Singleton.SelectedMapSize > 0)
+                    ? MatchManager.Singleton.SelectedMapSize
+                    : mapSize;
+                activeMapSize = MapGenerator.ClampMapSize(activeMapSize);
+                currentMapSize = activeMapSize;
+
+                float baseHeight = activeMapSize * 0.9f;
+                currentGodViewHeight = baseHeight;
+
+                Vector3 skyPos = new Vector3(0f, baseHeight, 0f);
+                Quaternion skyRot = Quaternion.Euler(90f, 0f, 0f);
+
+                transform.position = skyPos;
+                transform.rotation = skyRot;
+
+                targetSkyPosition = skyPos;
+                targetSkyRotation = skyRot;
+                godViewPanOffset = Vector3.zero;
+                currentLookAheadOffset = Vector3.zero;
+                lookAheadVelocity = Vector3.zero;
+
+                Debug.Log($"[CameraFollow] Activated Assassin God-View -> MapSize: {activeMapSize}x{activeMapSize}, Height: {baseHeight:F1}m, Character tracking detached.");
             }
             else
             {
-                ResetToTacticalView();
-            }
-        }
+                isSkyViewActive = false;
+                godViewPanOffset = Vector3.zero;
+                currentLookAheadOffset = Vector3.zero;
+                lookAheadVelocity = Vector3.zero;
 
-        private void Update()
-        {
-            if (isSkyViewActive)
-            {
-                // Handle WASD / Arrow Keys camera panning across active map bounds
-                float h = Input.GetAxisRaw("Horizontal");
-                float v = Input.GetAxisRaw("Vertical");
-
-                Vector3 panDir = new Vector3(h, 0f, v);
-                if (panDir.sqrMagnitude > 0.01f)
+                if (NetworkManager.Singleton != null && NetworkManager.Singleton.LocalClient != null && NetworkManager.Singleton.LocalClient.PlayerObject != null)
                 {
-                    godViewPanOffset += panDir.normalized * godViewPanSpeed * Time.deltaTime;
+                    target = NetworkManager.Singleton.LocalClient.PlayerObject.transform;
                 }
-
-                // Clamp panning within map boundaries (with a small edge buffer)
-                float maxPan = Mathf.Max(10f, currentMapSize * 0.5f);
-                godViewPanOffset.x = Mathf.Clamp(godViewPanOffset.x, -maxPan, maxPan);
-                godViewPanOffset.z = Mathf.Clamp(godViewPanOffset.z, -maxPan, maxPan);
-
-                targetSkyPosition = new Vector3(godViewPanOffset.x, currentRequiredHeight, godViewPanOffset.z);
+                Debug.Log($"[CameraFollow] Reset camera to standard tactical 60-degree view (Target: {(target != null ? target.name : "null")}).");
             }
         }
 
         private void LateUpdate()
         {
+            var matchMgr = MatchManager.Instance ?? MatchManager.Singleton;
+            bool isPrepPhase = matchMgr != null && matchMgr.CurrentState == MatchState.PrepPhase;
+            bool isLocalAssassin = LocalPlayerIsAssassin();
+
+            if ((isPrepPhase && isLocalAssassin) || isSkyViewActive)
+            {
+                // Force target to null
+                target = null;
+                isSkyViewActive = true;
+
+                // Calculate dynamic height based on map size
+                int activeMapSize = matchMgr != null && matchMgr.SelectedMapSize > 0
+                    ? matchMgr.SelectedMapSize
+                    : currentMapSize;
+                activeMapSize = MapGenerator.ClampMapSize(activeMapSize);
+                currentMapSize = activeMapSize;
+
+                if (currentGodViewHeight < 10f)
+                {
+                    currentGodViewHeight = activeMapSize * 0.9f;
+                }
+
+                // Handle smooth mouse scroll wheel zoom
+                float scroll = Input.GetAxis("Mouse ScrollWheel");
+                if (Mathf.Abs(scroll) > 0.01f)
+                {
+                    float minH = activeMapSize * 0.3f;
+                    float maxH = activeMapSize * 1.4f;
+                    currentGodViewHeight = Mathf.Clamp(currentGodViewHeight - (scroll * 15f), minH, maxH);
+                }
+
+                // Apply overhead God-View transform looking straight down
+                transform.position = new Vector3(0f, currentGodViewHeight, 0f);
+                transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+                return; // HARD GUARD: Return immediately so NO character tracking logic can execute!
+            }
+
             if (cam == null) cam = GetComponent<UnityEngine.Camera>();
             if (cam == null) cam = UnityEngine.Camera.main;
 
@@ -100,8 +174,7 @@ namespace HunterVsHider.Cameras
             // Check Match State:
             // - During CombatPhase: look-ahead offset is gated behind holding Right Mouse Button (ADS).
             // - During Lobby and PrepPhase: look-ahead offset is always active based on cursor position.
-            var matchMgr = HunterVsHider.Managers.MatchManager.Instance ?? HunterVsHider.Managers.MatchManager.Singleton;
-            bool isCombatPhase = matchMgr != null && matchMgr.CurrentState == HunterVsHider.Managers.MatchState.CombatPhase;
+            bool isCombatPhase = matchMgr != null && matchMgr.CurrentState == MatchState.CombatPhase;
             bool shouldApplyLookAhead = !isCombatPhase || Input.GetMouseButton(1);
 
             if (shouldApplyLookAhead && cam != null)
@@ -122,22 +195,12 @@ namespace HunterVsHider.Cameras
             // Smoothly interpolate look-ahead offset
             currentLookAheadOffset = Vector3.SmoothDamp(currentLookAheadOffset, targetLookAhead, ref lookAheadVelocity, lookAheadSmoothTime);
 
-            if (isSkyViewActive)
-            {
-                target = null;
-                Vector3 skyTargetPos = new Vector3(godViewPanOffset.x, currentRequiredHeight, godViewPanOffset.z) + currentLookAheadOffset;
-                transform.position = skyTargetPos;
-                transform.rotation = targetSkyRotation;
-            }
-            else
-            {
-                if (target == null) return;
+            if (target == null) return;
 
-                // Combine offset with player position and tactical offset
-                Vector3 targetPos = target.position + offset + currentLookAheadOffset;
-                transform.position = Vector3.Lerp(transform.position, targetPos, transitionSpeed * Time.deltaTime);
-                transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.Euler(pitch, 0f, 0f), transitionSpeed * Time.deltaTime);
-            }
+            // Combine offset with player position and tactical offset
+            Vector3 targetPos = target.position + offset + currentLookAheadOffset;
+            transform.position = Vector3.Lerp(transform.position, targetPos, transitionSpeed * Time.deltaTime);
+            transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.Euler(pitch, 0f, 0f), transitionSpeed * Time.deltaTime);
         }
 
         /// <summary>
@@ -146,48 +209,14 @@ namespace HunterVsHider.Cameras
         /// </summary>
         public void ActivateAssassinSkyView()
         {
-            int mapSize = (HunterVsHider.Managers.MatchManager.Singleton != null)
-                ? HunterVsHider.Managers.MatchManager.Singleton.selectedMapSize.Value
+            int mapSize = (MatchManager.Singleton != null)
+                ? MatchManager.Singleton.selectedMapSize.Value
                 : 50;
-            ActivateAssassinGodView(mapSize);
+            SetGodView(true, mapSize);
         }
 
-        /// <summary>
-        /// Activates the top-down 90-degree God-View framing the arena grid with WASD panning support.
-        /// </summary>
-        /// <param name="mapSize">Grid dimension (50, 100, 150)</param>
-        public void ActivateAssassinGodView(int mapSize)
-        {
-            currentMapSize = mapSize;
-            if (cam == null) cam = GetComponent<UnityEngine.Camera>();
-            if (cam == null) cam = UnityEngine.Camera.main;
-
-            currentRequiredHeight = 35f;
-
-            if (cam != null && cam.orthographic)
-            {
-                cam.orthographicSize = (mapSize * 0.5f) * 1.05f;
-            }
-
-            target = null;
-            godViewPanOffset = Vector3.zero;
-            currentLookAheadOffset = Vector3.zero;
-            lookAheadVelocity = Vector3.zero;
-
-            Vector3 skyPos = new Vector3(0f, 35f, 0f);
-            Quaternion skyRot = Quaternion.Euler(90f, 0f, 0f);
-
-            transform.position = skyPos;
-            transform.rotation = skyRot;
-
-            targetSkyPosition = skyPos;
-            targetSkyRotation = skyRot;
-            isSkyViewActive = true;
-
-            Debug.Log($"[CameraFollow] Activated Assassin God-View -> MapSize: {mapSize}x{mapSize}, Position: (0, 35, 0), Rotation: (90, 0, 0), Character tracking detached.");
-        }
-
-        public void ActivateAssassinSkyView(int mapSize) => ActivateAssassinGodView(mapSize);
+        public void ActivateAssassinGodView(int mapSize) => SetGodView(true, mapSize);
+        public void ActivateAssassinSkyView(int mapSize) => SetGodView(true, mapSize);
 
         /// <summary>
         /// Resets the camera back to the standard 60-degree tactical follow view.
