@@ -162,8 +162,11 @@ namespace HunterVsHider.UI
             var roomNames = GridManager.GetBreachRoomNames(mapSize);
             var roomPositions = GridManager.GetBreachSpawnPositions(mapSize);
 
-            int panelW = Mathf.Max(420, roomNames.Count * 135 + 20);
-            int panelH = 150;
+            int totalBtns = roomNames.Count;
+            int maxBtnsPerRow = totalBtns <= 4 ? totalBtns : 4;
+            int numRows = totalBtns <= 4 ? 1 : 2;
+            int panelW = Mathf.Clamp(maxBtnsPerRow * 140 + 30, 440, Screen.width - 40);
+            int panelH = numRows == 2 ? 200 : 150;
             int x = 20;
             int y = Screen.height - panelH - 30;
 
@@ -171,29 +174,28 @@ namespace HunterVsHider.UI
             GUILayout.BeginArea(new Rect(x, y, panelW, panelH), GUI.skin.box);
 
             GUILayout.Label("<size=14><b>POLICE INSERTION POINT - BREACH STAGING</b></size>");
-            GUILayout.Label("<color=#88AACC><size=11>Select your starting tactical insertion point on the South perimeter:</size></color>");
+            GUILayout.Label("<color=#88AACC><size=11>Select your starting tactical insertion point on the perimeter:</size></color>");
             GUILayout.Space(6);
 
-            GUILayout.BeginHorizontal();
-            for (int i = 0; i < roomNames.Count; i++)
+            for (int row = 0; row < numRows; row++)
             {
-                bool isSelected = (selectedRoomIndex == i);
-                if (isSelected)
+                GUILayout.BeginHorizontal();
+                int startIdx = row * maxBtnsPerRow;
+                int endIdx = Mathf.Min(startIdx + maxBtnsPerRow, totalBtns);
+                for (int i = startIdx; i < endIdx; i++)
                 {
-                    GUI.backgroundColor = selectedButtonColor;
-                }
-                else
-                {
-                    GUI.backgroundColor = normalButtonColor;
-                }
+                    bool isSelected = (selectedRoomIndex == i);
+                    GUI.backgroundColor = isSelected ? selectedButtonColor : normalButtonColor;
 
-                string btnText = isSelected ? $"<b>[✓] {roomNames[i]}</b>" : $"<b>{roomNames[i]}</b>";
-                if (GUILayout.Button(btnText, GUILayout.Height(44)))
-                {
-                    OnBreachButtonClicked(i);
+                    string btnText = isSelected ? $"<b>[✓] {roomNames[i]}</b>" : $"<b>{roomNames[i]}</b>";
+                    if (GUILayout.Button(btnText, GUILayout.Height(38)))
+                    {
+                        OnBreachButtonClicked(i);
+                    }
                 }
+                GUILayout.EndHorizontal();
+                if (numRows > 1 && row == 0) GUILayout.Space(4);
             }
-            GUILayout.EndHorizontal();
 
             GUILayout.Space(6);
             if (selectedRoomIndex >= 0 && selectedRoomIndex < roomPositions.Count)
