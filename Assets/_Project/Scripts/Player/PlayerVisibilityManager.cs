@@ -110,6 +110,12 @@ namespace HunterVsHider.Player
 
         private void SetPlayerVisualsVisible(GameObject targetPlayer, bool isVisible)
         {
+            TargetVisibility targetVis = targetPlayer.GetComponent<TargetVisibility>();
+            if (targetVis != null)
+            {
+                targetVis.IsVisible = isVisible;
+            }
+
             Renderer[] renderers = targetPlayer.GetComponentsInChildren<Renderer>(true);
             for (int i = 0; i < renderers.Length; i++)
             {

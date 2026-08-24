@@ -7,6 +7,8 @@ namespace HunterVsHider.Vision
     {
         public static FogMemoryManager Instance { get; private set; }
 
+        public event System.Action<RenderTexture> OnFoWTextureReady;
+
         [Header("Render Texture Targets")]
         [Tooltip("The output RenderTexture consumed by the world / post-process shader.")]
         public RenderTexture fovMaskRT;
@@ -70,12 +72,20 @@ namespace HunterVsHider.Vision
             };
             memoryBufferRT.Create();
 
-            // Clear to pure black (Unexplored)
-            ClearRenderTexture(memoryBufferRT, Color.black);
-            if (fovMaskRT != null)
+            if (fovMaskRT == null)
             {
-                ClearRenderTexture(fovMaskRT, Color.black);
+                fovMaskRT = new RenderTexture(width, height, 0, RenderTextureFormat.ARGB32)
+                {
+                    name = "FoVMask_RT",
+                    filterMode = FilterMode.Bilinear,
+                    wrapMode = TextureWrapMode.Clamp
+                };
+                fovMaskRT.Create();
             }
+
+            // Clear to pure black (Unexplored: RGBA 0,0,0,0)
+            ClearRenderTexture(memoryBufferRT, Color.clear);
+            ClearRenderTexture(fovMaskRT, Color.clear);
 
             // 3. Fallback memory material if not assigned in inspector
             if (decayMaterial == null)
@@ -88,6 +98,7 @@ namespace HunterVsHider.Vision
             }
 
             isInitialized = true;
+            OnFoWTextureReady?.Invoke(fovMaskRT);
         }
 
         private void LateUpdate()
@@ -129,8 +140,16 @@ namespace HunterVsHider.Vision
 
         public void ResetFog()
         {
-            if (memoryBufferRT != null) ClearRenderTexture(memoryBufferRT, Color.black);
-            if (fovMaskRT != null) ClearRenderTexture(fovMaskRT, Color.black);
+            if (rawVisRT != null) ClearRenderTexture(rawVisRT, Color.clear);
+            if (memoryBufferRT != null) ClearRenderTexture(memoryBufferRT, Color.clear);
+            if (fovMaskRT != null) ClearRenderTexture(fovMaskRT, Color.clear);
+            Debug.Log("[FogMemoryManager] ResetFog() -> Flushed rawVisRT, memoryBufferRT, and fovMaskRT to 100% pitch black (Color.clear).");
+            OnFoWTextureReady?.Invoke(fovMaskRT);
+        }
+
+        public void ClearExploredMemoryGrid()
+        {
+            ResetFog();
         }
 
         /// <summary>
@@ -147,6 +166,7 @@ namespace HunterVsHider.Vision
 
         private void ClearRenderTexture(RenderTexture rt, Color color)
         {
+            if (rt == null) return;
             RenderTexture prev = RenderTexture.active;
             RenderTexture.active = rt;
             GL.Clear(true, true, color);

@@ -35,6 +35,8 @@ namespace HunterVsHider.Cameras
         public bool isGodViewActive => isSkyViewActive;
         public bool IsGodViewActive => isSkyViewActive;
 
+        public static CameraFollow Instance { get; private set; }
+
         private UnityEngine.Camera cam;
         private Vector3 godViewPanOffset = Vector3.zero;
         private int currentMapSize = 50;
@@ -42,8 +44,27 @@ namespace HunterVsHider.Cameras
 
         private void Awake()
         {
+            if (Instance == null) Instance = this;
             cam = GetComponent<UnityEngine.Camera>();
             if (cam == null) cam = UnityEngine.Camera.main;
+        }
+
+        public void SetTarget(Transform newTarget)
+        {
+            target = newTarget;
+        }
+
+        public void SetGodView(bool active, int mapSize = 50)
+        {
+            if (active)
+            {
+                SetTarget(null);
+                ActivateAssassinGodView(mapSize);
+            }
+            else
+            {
+                ResetToTacticalView();
+            }
         }
 
         private void Update()
@@ -159,6 +180,7 @@ namespace HunterVsHider.Cameras
                 cam.orthographicSize = halfMap * 1.05f;
             }
 
+            target = null;
             godViewPanOffset = Vector3.zero;
 
             Vector3 skyPos = new Vector3(0f, currentRequiredHeight, 0f);

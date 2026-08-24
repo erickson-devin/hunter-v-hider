@@ -68,7 +68,17 @@ namespace HunterVsHider.Player
                     var follow = cam.GetComponent<HunterVsHider.Cameras.CameraFollow>();
                     if (follow != null)
                     {
-                        follow.target = transform;
+                        var matchMgr = HunterVsHider.Managers.MatchManager.Instance ?? HunterVsHider.Managers.MatchManager.Singleton;
+                        bool isPrep = matchMgr != null && matchMgr.CurrentState == HunterVsHider.Managers.MatchState.PrepPhase;
+                        if (isPrep && Role == PlayerRole.Assassin)
+                        {
+                            follow.SetTarget(null);
+                            follow.ActivateAssassinSkyView();
+                        }
+                        else
+                        {
+                            follow.SetTarget(transform);
+                        }
                     }
                 }
             }
@@ -135,38 +145,46 @@ namespace HunterVsHider.Player
 
             var cam = UnityEngine.Camera.main;
             var camFollow = cam != null ? cam.GetComponent<HunterVsHider.Cameras.CameraFollow>() : null;
+            if (camFollow == null) camFollow = HunterVsHider.Cameras.CameraFollow.Instance;
             var playerMovement = GetComponent<PlayerMovement>();
             var playerController = GetComponent<PlayerController>();
             var weaponManager = GetComponent<PlayerWeaponManager>();
             var dynamicFov = GetComponentInChildren<HunterVsHider.Vision.DynamicFOV>(true);
 
-            if (state == HunterVsHider.Managers.MatchState.WaitingForPlayers || state == HunterVsHider.Managers.MatchState.PrepPhase || state == HunterVsHider.Managers.MatchState.RoleAssignment)
+            if (state == HunterVsHider.Managers.MatchState.WaitingForPlayers || state == HunterVsHider.Managers.MatchState.RoleAssignment)
+            {
+                if (dynamicFov != null)
+                {
+                    dynamicFov.isVisionMaskSuppressed = true;
+                }
+                if (camFollow != null)
+                {
+                    camFollow.ResetToTacticalView(transform);
+                }
+                if (playerMovement != null) playerMovement.SetMovementEnabled(true);
+                if (playerController != null) playerController.enabled = true;
+                if (weaponManager != null) weaponManager.enabled = true;
+                ForceEnableAllPlayerRenderers();
+            }
+            else if (state == HunterVsHider.Managers.MatchState.PrepPhase)
             {
                 if (dynamicFov != null)
                 {
                     dynamicFov.isVisionMaskSuppressed = true;
                 }
 
-                if (state == HunterVsHider.Managers.MatchState.PrepPhase && Role == PlayerRole.Assassin)
+                if (Role == PlayerRole.Assassin)
                 {
                     int mapSize = HunterVsHider.Managers.MatchManager.Instance != null ? HunterVsHider.Managers.MatchManager.Instance.SelectedMapSize : 50;
                     if (camFollow != null)
                     {
+                        camFollow.SetTarget(null);
                         camFollow.ActivateAssassinGodView(mapSize);
                     }
-                    if (playerMovement != null)
-                    {
-                        playerMovement.SetMovementEnabled(false);
-                    }
-                    if (playerController != null)
-                    {
-                        playerController.enabled = false;
-                    }
-                    if (weaponManager != null)
-                    {
-                        weaponManager.enabled = false;
-                    }
-                    Debug.Log($"[PlayerNetworkState] Assassin entering PrepPhase -> Activated God-View Camera ({mapSize}x{mapSize}) with WASD pan. Disabled movement and weapon firing.");
+                    if (playerMovement != null) playerMovement.SetMovementEnabled(false);
+                    if (playerController != null) playerController.enabled = false;
+                    if (weaponManager != null) weaponManager.enabled = false;
+                    Debug.Log($"[PlayerNetworkState] Assassin entering PrepPhase -> Activated God-View Camera ({mapSize}x{mapSize}). Character targeting detached.");
                 }
                 else
                 {
@@ -174,25 +192,15 @@ namespace HunterVsHider.Player
                     {
                         camFollow.ResetToTacticalView(transform);
                     }
-                    if (playerMovement != null)
-                    {
-                        playerMovement.SetMovementEnabled(true);
-                    }
-                    if (playerController != null)
-                    {
-                        playerController.enabled = true;
-                    }
+                    if (playerMovement != null) playerMovement.SetMovementEnabled(true);
+                    if (playerController != null) playerController.enabled = true;
                     if (weaponManager != null)
                     {
                         weaponManager.enabled = true;
-                        if (state == HunterVsHider.Managers.MatchState.PrepPhase)
-                        {
-                            weaponManager.ResetAllWeaponStates();
-                        }
+                        weaponManager.ResetAllWeaponStates();
                     }
-
                     ForceEnableAllPlayerRenderers();
-                    Debug.Log($"[PlayerNetworkState] Local player ({Role}) in non-combat state {state} -> Tactical view attached. Full 360 deg unrestricted vision enabled.");
+                    Debug.Log($"[PlayerNetworkState] Police in PrepPhase -> Tactical follow camera attached to Police staging area.");
                 }
             }
             else if (state == HunterVsHider.Managers.MatchState.CombatPhase)
@@ -203,6 +211,7 @@ namespace HunterVsHider.Player
 
                     if (Role == PlayerRole.Police)
                     {
+                        HunterVsHider.Vision.FogMemoryManager.Instance?.ResetFog();
                         dynamicFov.ClearExploredMemoryGrid();
                         if (weaponManager != null && weaponManager.ActiveWeapon != null && weaponManager.ActiveWeapon.weaponData != null)
                         {
@@ -220,24 +229,26 @@ namespace HunterVsHider.Player
                         dynamicFov.UpdateWeaponVisionProfile(360f, 12f, 0.3f);
                     }
                 }
+                else
+                {
+                    if (Role == PlayerRole.Police)
+                    {
+                        HunterVsHider.Vision.FogMemoryManager.Instance?.ResetFog();
+                    }
+                    else if (Role == PlayerRole.Assassin)
+                    {
+                        HunterVsHider.Vision.FogMemoryManager.Instance?.SetAllToMemory(0.5f);
+                    }
+                }
 
                 if (camFollow != null)
                 {
                     camFollow.ResetToTacticalView(transform);
                 }
-                if (playerMovement != null)
-                {
-                    playerMovement.SetMovementEnabled(true);
-                }
-                if (playerController != null)
-                {
-                    playerController.enabled = true;
-                }
-                if (weaponManager != null)
-                {
-                    weaponManager.enabled = true;
-                }
-                Debug.Log($"[PlayerNetworkState] Local player ({Role}) entered CombatPhase -> Smooth 0.3s transition to active weapon vision cone profile.");
+                if (playerMovement != null) playerMovement.SetMovementEnabled(true);
+                if (playerController != null) playerController.enabled = true;
+                if (weaponManager != null) weaponManager.enabled = true;
+                Debug.Log($"[PlayerNetworkState] Local player ({Role}) entered CombatPhase -> Standard tactical follow attached to character.");
             }
             else
             {

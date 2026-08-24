@@ -56,7 +56,7 @@ Shader "HunterVsHider/FoW_MemoryDecay"
                 // Otherwise retain previously accumulated memory.
                 fixed newMem = max(prevMem, (currentVis > 0.1 ? _MemoryFloor : 0.0));
 
-                return fixed4(newMem, newMem, newMem, 1.0);
+                return fixed4(newMem, newMem, newMem, newMem);
             }
             ENDCG
         }
@@ -77,7 +77,7 @@ Shader "HunterVsHider/FoW_MemoryDecay"
                 // Active vision (1.0) takes highest priority; otherwise output instant memory (0.5) or unexplored (0.0)
                 fixed finalMask = max(currentVis, mem);
 
-                return fixed4(finalMask, finalMask, finalMask, 1.0);
+                return fixed4(finalMask, finalMask, finalMask, finalMask);
             }
             ENDCG
         }
