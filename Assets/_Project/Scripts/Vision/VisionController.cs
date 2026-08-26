@@ -1,0 +1,417 @@
+using System;
+using System.Collections.Generic;
+using UnityEngine;
+using HunterVsHider.Player;
+
+namespace HunterVsHider.Vision
+{
+    public class VisionController : MonoBehaviour
+    {
+        [Header("Eye / Origin Settings")]
+        [SerializeField] private Vector3 eyeOffset = new Vector3(0f, 1.8f, 0f);
+        [SerializeField] private Transform originTransform;
+        [SerializeField] private Transform aimDirectionTransform;
+
+        [Header("FOV Settings")]
+        [Range(10f, 360f)]
+        [SerializeField] private float viewAngle = 90f;
+        [SerializeField] private float viewDistance = 25f;
+        [Range(10, 360)]
+        [SerializeField] private int rayCount = 120;
+
+        [Header("Proximity Settings")]
+        [SerializeField] private float proximityRadius = 2.5f;
+        [SerializeField] private int proximityRayCount = 36;
+
+        [Header("Layer Masks")]
+        [SerializeField] private LayerMask obstacleHighLayer;
+        [SerializeField] private LayerMask obstacleLowLayer;
+
+        [Header("Low Obstacle Cover Settings")]
+        [SerializeField] private float defaultLowObstacleHeight = 1.0f;
+        [SerializeField] private float groundPlaneY = 0f;
+
+        private PlayerWeaponManager cachedWeaponManager;
+
+        public struct RayVisionResult
+        {
+            public Vector3 direction;
+            public float firstHitDist;
+            public bool hasLowObstacleShadow;
+            public float shadowEndDist;
+            public float secondHitDist;
+        }
+
+        public struct ProximityRayResult
+        {
+            public Vector3 direction;
+            public float hitDist;
+        }
+
+        private readonly List<RayVisionResult> rayResults = new List<RayVisionResult>(360);
+        private readonly List<ProximityRayResult> proximityResults = new List<ProximityRayResult>(72);
+
+        public float ViewAngle => viewAngle;
+        public float ViewDistance => viewDistance;
+        public int RayCount => rayCount;
+        public float ProximityRadius => proximityRadius;
+        public Vector3 EyeOffset => eyeOffset;
+
+        public Transform OriginTransform
+        {
+            get
+            {
+                if (originTransform == null)
+                {
+                    if (cachedWeaponManager == null)
+                    {
+                        cachedWeaponManager = GetComponent<PlayerWeaponManager>() ?? GetComponentInParent<PlayerWeaponManager>();
+                    }
+                    if (cachedWeaponManager != null && cachedWeaponManager.ActiveMuzzlePoint != null)
+                    {
+                        return cachedWeaponManager.ActiveMuzzlePoint;
+                    }
+
+                    // Fallback: search for child named "MuzzlePoint"
+                    Transform muzzle = transform.Find("WeaponHolder/Gun_Pistol/MuzzlePoint") ??
+                                       transform.Find("WeaponHolder/Gun_Rifle/MuzzlePoint");
+                    if (muzzle != null) return muzzle;
+                }
+                return originTransform;
+            }
+            set => originTransform = value;
+        }
+
+        public Vector3 EyeWorldPosition
+        {
+            get
+            {
+                Transform ot = OriginTransform;
+                return ot != null ? ot.position : (transform.position + eyeOffset);
+            }
+        }
+
+        public Vector3 ForwardDirection
+        {
+            get
+            {
+                Transform ot = OriginTransform;
+                if (ot != null)
+                {
+                    Vector3 fwd = ot.forward;
+                    fwd.y = 0f;
+                    if (fwd.sqrMagnitude > 0.001f) return fwd.normalized;
+                }
+
+                if (aimDirectionTransform != null)
+                {
+                    Vector3 fwd = aimDirectionTransform.forward;
+                    fwd.y = 0f;
+                    if (fwd.sqrMagnitude > 0.001f) return fwd.normalized;
+                }
+
+                Transform wh = transform.Find("WeaponHolder");
+                if (wh != null)
+                {
+                    Vector3 fwd = wh.forward;
+                    fwd.y = 0f;
+                    if (fwd.sqrMagnitude > 0.001f) return fwd.normalized;
+                }
+
+                Vector3 tfFwd = transform.forward;
+                tfFwd.y = 0f;
+                return tfFwd.sqrMagnitude > 0.001f ? tfFwd.normalized : Vector3.forward;
+            }
+        }
+
+        public IReadOnlyList<RayVisionResult> RayResults => rayResults;
+        public IReadOnlyList<ProximityRayResult> ProximityResults => proximityResults;
+
+        private void Awake()
+        {
+            cachedWeaponManager = GetComponent<PlayerWeaponManager>() ?? GetComponentInParent<PlayerWeaponManager>();
+            ValidateLayers();
+            EnsureFOVIndicator();
+        }
+
+        private void EnsureFOVIndicator()
+        {
+            FieldOfView fov = GetComponentInChildren<FieldOfView>();
+            if (fov == null)
+            {
+                Transform fovTrans = transform.Find("FOV_Indicator");
+                GameObject fovObj;
+                if (fovTrans == null)
+                {
+                    fovObj = new GameObject("FOV_Indicator");
+                    fovObj.transform.SetParent(transform, false);
+                    fovObj.transform.localPosition = new Vector3(0f, 0.05f, 0f);
+                }
+                else
+                {
+                    fovObj = fovTrans.gameObject;
+                }
+
+                fov = fovObj.AddComponent<FieldOfView>();
+            }
+
+            MeshRenderer mr = fov.GetComponent<MeshRenderer>();
+            if (mr != null && mr.sharedMaterial == null)
+            {
+                Shader maskShader = Shader.Find("Custom/FoW_Mask");
+                if (maskShader != null)
+                {
+                    mr.material = new Material(maskShader);
+                }
+            }
+        }
+
+        private void OnEnable()
+        {
+            if (!FogOfWarManager.IsShuttingDown && FogOfWarManager.Instance != null)
+            {
+                FogOfWarManager.Instance.RegisterVisionController(this);
+            }
+        }
+
+        private void OnDisable()
+        {
+            if (!FogOfWarManager.IsShuttingDown && FogOfWarManager.Instance != null)
+            {
+                FogOfWarManager.Instance.UnregisterVisionController(this);
+            }
+        }
+
+        public void ValidateLayers()
+        {
+            if (obstacleHighLayer.value == 0)
+            {
+                int highLayer = LayerMask.NameToLayer("ObstacleHigh");
+                int defaultObstacle = LayerMask.NameToLayer("Obstacle");
+                int mask = 0;
+                if (highLayer != -1) mask |= (1 << highLayer);
+                if (defaultObstacle != -1) mask |= (1 << defaultObstacle);
+
+                obstacleHighLayer = mask != 0 ? mask : 1;
+            }
+
+            if (obstacleLowLayer.value == 0)
+            {
+                int lowLayer = LayerMask.NameToLayer("ObstacleLow");
+                if (lowLayer != -1) obstacleLowLayer = (1 << lowLayer);
+            }
+        }
+
+        public void CalculateVision()
+        {
+            rayResults.Clear();
+            proximityResults.Clear();
+
+            Vector3 eyePos = EyeWorldPosition;
+            int combinedMask = obstacleHighLayer | obstacleLowLayer;
+
+            // 1. Calculate 360-Degree Immediate Proximity Circle
+            float proxStep = 360f / Mathf.Max(12, proximityRayCount);
+            for (int i = 0; i < proximityRayCount; i++)
+            {
+                float angle = i * proxStep;
+                Vector3 dir = Quaternion.Euler(0f, angle, 0f) * Vector3.forward;
+                float hitDist = proximityRadius;
+
+                if (Physics.Raycast(eyePos, dir, out RaycastHit hit, proximityRadius, combinedMask))
+                {
+                    hitDist = hit.distance;
+                }
+
+                proximityResults.Add(new ProximityRayResult
+                {
+                    direction = dir,
+                    hitDist = hitDist
+                });
+            }
+
+            // 2. Calculate Directional FOV Wedge with 2.5D Height Occlusion
+            Vector3 baseForward = ForwardDirection;
+            float startAngle = -viewAngle / 2f;
+            float angleStep = viewAngle / rayCount;
+
+            for (int i = 0; i <= rayCount; i++)
+            {
+                float currentAngle = startAngle + i * angleStep;
+                Vector3 dir = Quaternion.Euler(0f, currentAngle, 0f) * baseForward;
+                dir.y = 0f;
+                dir.Normalize();
+
+                RayVisionResult result = new RayVisionResult
+                {
+                    direction = dir,
+                    firstHitDist = viewDistance,
+                    hasLowObstacleShadow = false,
+                    shadowEndDist = viewDistance,
+                    secondHitDist = viewDistance
+                };
+
+                // Cast primary ray from eye position
+                if (Physics.Raycast(eyePos, dir, out RaycastHit hit, viewDistance, combinedMask))
+                {
+                    int hitLayerMask = 1 << hit.collider.gameObject.layer;
+
+                    if ((obstacleHighLayer.value & hitLayerMask) != 0)
+                    {
+                        // 3m wall: completely occludes vision, terminates ray
+                        result.firstHitDist = hit.distance;
+                        result.hasLowObstacleShadow = false;
+                    }
+                    else if ((obstacleLowLayer.value & hitLayerMask) != 0)
+                    {
+                        // 1m cover box: calculate clearance angle
+                        result.firstHitDist = hit.distance;
+                        result.hasLowObstacleShadow = true;
+
+                        float obstacleHeight = defaultLowObstacleHeight;
+                        if (hit.collider != null)
+                        {
+                            obstacleHeight = hit.collider.bounds.max.y;
+                        }
+
+                        float eyeHeight = eyePos.y;
+                        float d1 = hit.distance;
+
+                        if (eyeHeight > obstacleHeight && d1 > 0.001f)
+                        {
+                            // Slope of sightline from eye over obstacle top
+                            float slope = (eyeHeight - obstacleHeight) / d1;
+                            
+                            // Distance behind box where sightline hits ground (y = groundPlaneY)
+                            float dropToGround = Mathf.Max(0.01f, obstacleHeight - groundPlaneY);
+                            float deltaDistance = dropToGround / slope;
+                            float shadowEnd = d1 + deltaDistance;
+
+                            result.shadowEndDist = Mathf.Min(viewDistance, shadowEnd);
+
+                            // Check if area beyond shadow has line of sight to max view distance
+                            if (result.shadowEndDist < viewDistance)
+                            {
+                                float remainingDist = viewDistance - result.shadowEndDist;
+                                Vector3 continueOrigin = eyePos + dir * result.shadowEndDist;
+
+                                if (Physics.Raycast(continueOrigin, dir, out RaycastHit secondHit, remainingDist, combinedMask))
+                                {
+                                    result.secondHitDist = result.shadowEndDist + secondHit.distance;
+                                }
+                                else
+                                {
+                                    result.secondHitDist = viewDistance;
+                                }
+                            }
+                            else
+                            {
+                                result.secondHitDist = viewDistance;
+                            }
+                        }
+                        else
+                        {
+                            // Eye is below or at obstacle height: full shadow
+                            result.shadowEndDist = viewDistance;
+                            result.secondHitDist = viewDistance;
+                        }
+                    }
+                    else
+                    {
+                        result.firstHitDist = hit.distance;
+                    }
+                }
+                else
+                {
+                    result.firstHitDist = viewDistance;
+                }
+
+                rayResults.Add(result);
+            }
+        }
+
+        /// <summary>
+        /// Checks whether a target point is in active line of sight of this police unit.
+        /// </summary>
+        public bool IsTargetInActiveVision(Vector3 targetPos, float targetHeight = 1.0f)
+        {
+            Vector3 eyePos = EyeWorldPosition;
+            Vector3 toTarget = targetPos - transform.position;
+            toTarget.y = 0f;
+            float horizontalDist = toTarget.magnitude;
+
+            // Proximity check
+            if (horizontalDist <= proximityRadius)
+            {
+                Vector3 checkPt = targetPos + Vector3.up * targetHeight;
+                Vector3 dir = checkPt - eyePos;
+                if (!Physics.Raycast(eyePos, dir.normalized, out RaycastHit hit, dir.magnitude, obstacleHighLayer))
+                {
+                    return true;
+                }
+            }
+
+            if (horizontalDist > viewDistance) return false;
+
+            Vector3 baseForward = ForwardDirection;
+            float angleToTarget = Vector3.Angle(baseForward, toTarget.normalized);
+            if (angleToTarget > viewAngle / 2f) return false;
+
+            Vector3 targetCheckPoint = targetPos + Vector3.up * targetHeight;
+            Vector3 rayDir = targetCheckPoint - eyePos;
+            float rayLen = rayDir.magnitude;
+            if (rayLen < 0.01f) return true;
+
+            int combinedMask = obstacleHighLayer | obstacleLowLayer;
+
+            // Direct line of sight raycast
+            if (Physics.Raycast(eyePos, rayDir.normalized, out RaycastHit sightHit, rayLen, combinedMask))
+            {
+                // If we hit high obstacle before target, blocked completely
+                if ((obstacleHighLayer.value & (1 << sightHit.collider.gameObject.layer)) != 0)
+                {
+                    return false;
+                }
+
+                // If we hit low obstacle, check if target is hidden behind low cover
+                if ((obstacleLowLayer.value & (1 << sightHit.collider.gameObject.layer)) != 0)
+                {
+                    float obsTop = sightHit.collider.bounds.max.y;
+                    float hitDist = Vector3.Distance(new Vector3(eyePos.x, 0, eyePos.z), new Vector3(sightHit.point.x, 0, sightHit.point.z));
+                    
+                    if (eyePos.y > obsTop && hitDist > 0.01f)
+                    {
+                        float slope = (eyePos.y - obsTop) / hitDist;
+                        float rayYAtTarget = obsTop - slope * (horizontalDist - hitDist);
+                        if (targetCheckPoint.y <= rayYAtTarget)
+                        {
+                            return false;
+                        }
+                    }
+                    else
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        private void OnDrawGizmosSelected()
+        {
+            Gizmos.color = Color.yellow;
+            Vector3 eyePos = EyeWorldPosition;
+            Gizmos.DrawWireSphere(eyePos, 0.2f);
+            Gizmos.DrawWireSphere(transform.position, proximityRadius);
+
+            Vector3 baseForward = ForwardDirection;
+            Vector3 leftDir = Quaternion.Euler(0f, -viewAngle / 2f, 0f) * baseForward;
+            Vector3 rightDir = Quaternion.Euler(0f, viewAngle / 2f, 0f) * baseForward;
+
+            Gizmos.color = Color.cyan;
+            Gizmos.DrawRay(eyePos, leftDir * viewDistance);
+            Gizmos.DrawRay(eyePos, rightDir * viewDistance);
+        }
+    }
+}

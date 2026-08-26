@@ -14,6 +14,8 @@ namespace HunterVsHider.Cameras
     {
         [Header("Target Tracking")]
         public Transform target;
+        public float smoothSpeed = 10f;
+        public bool useSmooth = true;
         
         [Header("Tactical Camera Offsets")]
         public Vector3 offset = new Vector3(0f, 18f, -10.4f);
@@ -124,6 +126,42 @@ namespace HunterVsHider.Cameras
                     target = NetworkManager.Singleton.LocalClient.PlayerObject.transform;
                 }
                 Debug.Log($"[CameraFollow] Reset camera to standard tactical 60-degree view (Target: {(target != null ? target.name : "null")}).");
+            }
+        }
+
+        private void Awake()
+        {
+            EnsureCameraSettings();
+            FindTargetIfNull();
+        }
+
+        private void Start()
+        {
+            FindTargetIfNull();
+        }
+
+        public void EnsureCameraSettings()
+        {
+            Camera cam = GetComponent<Camera>();
+            if (cam != null)
+            {
+                cam.orthographic = false;
+                cam.fieldOfView = 60f;
+                cam.nearClipPlane = 0.3f;
+                cam.farClipPlane = 100f;
+                cam.depthTextureMode |= DepthTextureMode.Depth;
+            }
+        }
+
+        public void FindTargetIfNull()
+        {
+            if (target == null)
+            {
+                GameObject player = GameObject.FindWithTag("Player") ?? GameObject.Find("Player");
+                if (player != null)
+                {
+                    target = player.transform;
+                }
             }
         }
 

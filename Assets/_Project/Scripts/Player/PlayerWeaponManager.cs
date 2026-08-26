@@ -24,6 +24,9 @@ namespace HunterVsHider.Player
         public Weapon slot1Weapon => (weaponSlots != null && weaponSlots.Length > 0) ? weaponSlots[0] : null;
         public Weapon slot2Weapon => (weaponSlots != null && weaponSlots.Length > 1) ? weaponSlots[1] : null;
 
+        public Gun ActiveGun => activeGun;
+        public Transform ActiveMuzzlePoint => activeGun != null ? activeGun.MuzzlePoint : null;
+
         private void Awake()
         {
             playerNetworkState = GetComponent<PlayerNetworkState>();
