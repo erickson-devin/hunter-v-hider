@@ -7,8 +7,10 @@ namespace HunterVsHider.Player
     [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
     public class FieldOfView : MonoBehaviour
     {
-        [Header("References")]
-        [SerializeField] private VisionController visionController;
+        public float viewRadius = 5f;
+        [Range(0, 360)]
+        public float viewAngle = 90f;
+        public bool isVisionMaskSuppressed { get; set; } = false;
 
         [Header("Mesh Settings")]
         [SerializeField] private float meshYOffset = 0.05f;
@@ -221,6 +223,11 @@ namespace HunterVsHider.Player
                 mesh.SetTriangles(triangles, 0, false);
                 mesh.RecalculateBounds();
             }
+        }
+
+        public void ClearExploredMemoryGrid()
+        {
+            // Facade placeholder
         }
     }
 }

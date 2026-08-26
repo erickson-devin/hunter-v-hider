@@ -3,16 +3,12 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine.SceneManagement;
 
-[InitializeOnLoad]
 public class SetupTask23
 {
-    static SetupTask23()
+    [MenuItem("Tools/Setup Tasks/Task 23")]
+    public static void ExecuteSetup()
     {
-        EditorApplication.delayCall += ExecuteSetup;
-    }
-
-    private static void ExecuteSetup()
-    {
+        if (ParrelSync.ClonesManager.IsClone()) return;
         if (Application.isPlaying) return;
 
         Scene activeScene = EditorSceneManager.GetActiveScene();

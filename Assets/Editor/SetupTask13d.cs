@@ -3,16 +3,12 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine.SceneManagement;
 
-[InitializeOnLoad]
 public class SetupTask13d
 {
-    static SetupTask13d()
+    [MenuItem("Tools/Setup Tasks/Task 13d")]
+    public static void ApplyPrefabOverrides()
     {
-        EditorApplication.delayCall += ApplyPrefabOverrides;
-    }
-
-    private static void ApplyPrefabOverrides()
-    {
+        if (ParrelSync.ClonesManager.IsClone()) return;
         Scene activeScene = EditorSceneManager.GetActiveScene();
         if (activeScene.name != "Tactical_Main") return;
 

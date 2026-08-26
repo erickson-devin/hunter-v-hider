@@ -4,16 +4,12 @@ using UnityEditor.SceneManagement;
 using UnityEngine.SceneManagement;
 using HunterVsHider.Weapons;
 
-[InitializeOnLoad]
 public class SetupTask17
 {
-    static SetupTask17()
+    [MenuItem("Tools/Setup Tasks/Task 17")]
+    public static void ExecuteSetup()
     {
-        EditorApplication.delayCall += ExecuteSetup;
-    }
-
-    private static void ExecuteSetup()
-    {
+        if (ParrelSync.ClonesManager.IsClone()) return;
         Scene activeScene = EditorSceneManager.GetActiveScene();
         if (activeScene.name != "Tactical_Main")
         {

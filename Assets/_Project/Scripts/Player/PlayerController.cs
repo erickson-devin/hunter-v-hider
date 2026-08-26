@@ -1,9 +1,10 @@
 using UnityEngine;
+using Unity.Netcode;
 
 namespace HunterVsHider.Player
 {
     [RequireComponent(typeof(Rigidbody))]
-    public class PlayerController : MonoBehaviour
+    public class PlayerController : NetworkBehaviour
     {
         [Header("Movement Settings")]
         public float moveSpeed = 5f;
@@ -24,6 +25,8 @@ namespace HunterVsHider.Player
 
         private void Update()
         {
+            if (!IsOwner) return;
+
             // Input logic
             movement.x = Input.GetAxisRaw("Horizontal");
             movement.z = Input.GetAxisRaw("Vertical"); // 3D mapping
@@ -32,6 +35,8 @@ namespace HunterVsHider.Player
 
         private void FixedUpdate()
         {
+            if (!IsOwner) return;
+
             // Physics movement
             rb.MovePosition(rb.position + movement.normalized * moveSpeed * Time.fixedDeltaTime);
             
