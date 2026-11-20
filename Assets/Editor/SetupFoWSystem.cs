@@ -6,6 +6,8 @@ using HunterVsHider.Vision;
 using HunterVsHider.Player;
 using HunterVsHider.Gameplay;
 using HunterVsHider.Cameras;
+using FieldOfView = HunterVsHider.Player.FieldOfView;
+using TargetVisibility = HunterVsHider.Gameplay.TargetVisibility;
 
 namespace HunterVsHider.EditorScripts
 {

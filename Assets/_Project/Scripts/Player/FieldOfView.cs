@@ -7,6 +7,9 @@ namespace HunterVsHider.Player
     [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
     public class FieldOfView : MonoBehaviour
     {
+        [Header("References")]
+        [SerializeField] private VisionController visionController;
+
         public float viewRadius = 5f;
         [Range(0, 360)]
         public float viewAngle = 90f;

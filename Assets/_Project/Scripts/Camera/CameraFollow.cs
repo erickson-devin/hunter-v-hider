@@ -53,6 +53,9 @@ namespace HunterVsHider.Cameras
             if (Instance == null) Instance = this;
             cam = GetComponent<UnityEngine.Camera>();
             if (cam == null) cam = UnityEngine.Camera.main;
+
+            EnsureCameraSettings();
+            FindTargetIfNull();
         }
 
         public bool LocalPlayerIsAssassin()
@@ -127,12 +130,6 @@ namespace HunterVsHider.Cameras
                 }
                 Debug.Log($"[CameraFollow] Reset camera to standard tactical 60-degree view (Target: {(target != null ? target.name : "null")}).");
             }
-        }
-
-        private void Awake()
-        {
-            EnsureCameraSettings();
-            FindTargetIfNull();
         }
 
         private void Start()
