@@ -1,109 +1,3 @@
-using UnityEngine;
-
-namespace HunterVsHider.Vision
-{
-    /// <summary>
-    /// Fog of War vision manager component.
-    /// Provides local client RenderTexture fovMaskRT and instance texture ready event access.
-    /// Attached to Player entity and/or Fog system root to ensure local client authority resolution.
-    /// </summary>
-    public class FogOfWarManager : MonoBehaviour
-    {
-        public static FogOfWarManager Instance { get; private set; }
-
-        /// <summary>
-        /// Instance event fired when this FoW manager's mask RenderTexture is generated or updated.
-        /// </summary>
-        public event System.Action<RenderTexture> OnFoWTextureReady;
-
-        [Tooltip("Output FoW mask RenderTexture consumed by the world / UI shaders.")]
-        [SerializeField] private RenderTexture customFovMaskRT;
-
-        public RenderTexture fovMaskRT
-        {
-            get
-            {
-                if (FogMemoryManager.Instance != null && FogMemoryManager.Instance.fovMaskRT != null)
-                {
-                    return FogMemoryManager.Instance.fovMaskRT;
-                }
-                return customFovMaskRT;
-            }
-            set
-            {
-                customFovMaskRT = value;
-                OnFoWTextureReady?.Invoke(customFovMaskRT);
-            }
-        }
-
-        private void Awake()
-        {
-            if (Instance == null)
-            {
-                Instance = this;
-            }
-        }
-
-        private void OnEnable()
-        {
-            if (FogMemoryManager.Instance != null)
-            {
-                FogMemoryManager.Instance.OnFoWTextureReady += HandleFogMemoryTextureReady;
-            }
-        }
-
-        private void OnDisable()
-        {
-            if (FogMemoryManager.Instance != null)
-            {
-                FogMemoryManager.Instance.OnFoWTextureReady -= HandleFogMemoryTextureReady;
-            }
-        }
-
-        private void Start()
-        {
-            if (FogMemoryManager.Instance != null)
-            {
-                FogMemoryManager.Instance.OnFoWTextureReady -= HandleFogMemoryTextureReady;
-                FogMemoryManager.Instance.OnFoWTextureReady += HandleFogMemoryTextureReady;
-            }
-
-            if (fovMaskRT != null)
-            {
-                OnFoWTextureReady?.Invoke(fovMaskRT);
-            }
-        }
-
-        private void HandleFogMemoryTextureReady(RenderTexture rt)
-        {
-            OnFoWTextureReady?.Invoke(rt);
-        }
-
-        public void ResetFog()
-        {
-            FogMemoryManager.Instance?.ResetFog();
-            if (fovMaskRT != null)
-            {
-                OnFoWTextureReady?.Invoke(fovMaskRT);
-            }
-        }
-
-        public void ClearExploredMemoryGrid()
-        {
-            FogMemoryManager.Instance?.ClearExploredMemoryGrid();
-            if (fovMaskRT != null)
-            {
-                OnFoWTextureReady?.Invoke(fovMaskRT);
-            }
-        }
-
-        public void SetAllToMemory(float memoryFloor = 0.5f)
-        {
-            FogMemoryManager.Instance?.SetAllToMemory(memoryFloor);
-            if (fovMaskRT != null)
-            {
-                OnFoWTextureReady?.Invoke(fovMaskRT);
-            }
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -179,6 +73,95 @@ namespace HunterVsHider.Vision
         public Vector2 ArenaMax => arenaMax;
         public Vector2 ArenaSize => arenaMax - arenaMin;
 
+        /// <summary>
+        /// Fired when the FoW mask RenderTexture is generated or updated (consumed by MiniMapUI).
+        /// </summary>
+        public event System.Action<RenderTexture> OnFoWTextureReady;
+
+        [Tooltip("Optional output FoW mask RenderTexture consumed by the world / UI shaders.")]
+        [SerializeField] private RenderTexture customFovMaskRT;
+
+        private FogMemoryManager subscribedMemoryManager;
+
+        /// <summary>
+        /// FoW mask texture: prefers FogMemoryManager's mask, then the custom override, then the combined discovery buffer.
+        /// </summary>
+        public RenderTexture fovMaskRT
+        {
+            get
+            {
+                if (FogMemoryManager.Instance != null && FogMemoryManager.Instance.fovMaskRT != null)
+                {
+                    return FogMemoryManager.Instance.fovMaskRT;
+                }
+                return customFovMaskRT != null ? customFovMaskRT : combinedFoWRT;
+            }
+            set
+            {
+                customFovMaskRT = value;
+                OnFoWTextureReady?.Invoke(customFovMaskRT);
+            }
+        }
+
+        private void OnEnable()
+        {
+            SubscribeToMemoryManager();
+        }
+
+        private void SubscribeToMemoryManager()
+        {
+            var memory = FogMemoryManager.Instance;
+            if (memory == subscribedMemoryManager) return;
+
+            UnsubscribeFromMemoryManager();
+            if (memory != null)
+            {
+                memory.OnFoWTextureReady += HandleFogMemoryTextureReady;
+                subscribedMemoryManager = memory;
+            }
+        }
+
+        private void UnsubscribeFromMemoryManager()
+        {
+            if (subscribedMemoryManager != null)
+            {
+                subscribedMemoryManager.OnFoWTextureReady -= HandleFogMemoryTextureReady;
+            }
+            subscribedMemoryManager = null;
+        }
+
+        private void HandleFogMemoryTextureReady(RenderTexture rt)
+        {
+            OnFoWTextureReady?.Invoke(rt);
+        }
+
+        private void NotifyTextureReady()
+        {
+            RenderTexture rt = fovMaskRT;
+            if (rt != null)
+            {
+                OnFoWTextureReady?.Invoke(rt);
+            }
+        }
+
+        public void ResetFog()
+        {
+            FogMemoryManager.Instance?.ResetFog();
+            NotifyTextureReady();
+        }
+
+        public void ClearExploredMemoryGrid()
+        {
+            FogMemoryManager.Instance?.ClearExploredMemoryGrid();
+            NotifyTextureReady();
+        }
+
+        public void SetAllToMemory(float memoryFloor = 0.5f)
+        {
+            FogMemoryManager.Instance?.SetAllToMemory(memoryFloor);
+            NotifyTextureReady();
+        }
+
         private void Awake()
         {
             if (_instance != null && _instance != this)
@@ -197,6 +180,10 @@ namespace HunterVsHider.Vision
         {
             FindPlayerIfNull();
             EnsureCameraSetup();
+
+            // FogMemoryManager may have initialized after our OnEnable.
+            SubscribeToMemoryManager();
+            NotifyTextureReady();
         }
 
         private void FindPlayerIfNull()
@@ -215,6 +202,7 @@ namespace HunterVsHider.Vision
 
         private void OnDisable()
         {
+            UnsubscribeFromMemoryManager();
             ReleaseResources();
         }
 
@@ -446,7 +434,7 @@ namespace HunterVsHider.Vision
                 if (controller == null || !controller.isActiveAndEnabled) continue;
 
                 controller.CalculateVision();
-                var fov = controller.GetComponentInChildren<FieldOfView>() ?? controller.GetComponent<FieldOfView>();
+                var fov = controller.GetComponentInChildren<HunterVsHider.Player.FieldOfView>() ?? controller.GetComponent<HunterVsHider.Player.FieldOfView>();
                 if (fov != null)
                 {
                     fov.EnsureComponents();
